@@ -10,7 +10,7 @@ Nix（home-manager standalone）でUbuntu環境を宣言的に管理するため
 | [`../bootstrap.sh`](../bootstrap.sh) | 新しいUbuntuマシンの1コマンドセットアップ。`~/Dev/kaishi` の作成・クローン・ユーザー名の自動書き換え・初回適用までを行う |
 | [`../flake.nix`](../flake.nix) | エントリポイント。home-manager standaloneの `homeConfigurations."ubuntu"` を定義し、ホスト名に依存しない構成名 `ubuntu` を固定する。ユーザー名（`username`）はbootstrap.shがそのマシンに合わせて自動で書き換える |
 | [`packages.nix`](packages.nix) | CLIツール群（git・gh・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq等）。バージョンは `flake.lock` で固定される |
-| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` の書き込み可能リンクと、`.claude/` 配下のリンク処理（既存 `setup.sh` をactivation時に自動実行） |
+| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` と VSCode/Cursor 設定（`../vscode/` の settings.json・keybindings.json）の書き込み可能リンク、拡張機能の自動インストール（`../vscode/install-extensions.sh`）、`.claude/` 配下のリンク処理（既存 `setup.sh` をactivation時に自動実行） |
 
 ## 新しいUbuntuマシンのセットアップ手順
 
@@ -41,7 +41,7 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 ### 手動で必要な操作（自動化できないもの）
 
 - **Docker Engineのapt導入** — Docker DesktopではなくDocker Engineを公式aptリポジトリから導入し、導入後は現在のユーザーを `docker` グループへ追加する（`sudo usermod -aG docker $USER`。反映には再ログインが必要）。Nix側の `docker`（CLI）はこのDockerデーモンに接続するクライアントとして使う
-- **GUIアプリの手動導入** — Chrome・VSCode・Slack等は宣言管理の対象外。aptリポジトリ・snap・公式debパッケージで個別に導入する
+- **GUIアプリの手動導入** — Chrome・VSCode・Slack等は宣言管理の対象外。aptリポジトリ・snap・公式debパッケージで個別に導入する（VSCode/Cursorは本体のみ手動導入で、設定・拡張機能は`vscode/`配下で宣言管理される）
 - **`~/.claude/.line-env` の手動配置** — `.claude/.line-env.example` を参考に。実トークンはコミット禁止
 - **各アプリへのサインイン** — Chrome同期・Docker Hub・Slack等
 
