@@ -11,6 +11,7 @@ Nix（home-manager standalone）でUbuntu環境を宣言的に管理するため
 | [`../flake.nix`](../flake.nix) | エントリポイント。home-manager standaloneの `homeConfigurations."ubuntu"` を定義し、ホスト名に依存しない構成名 `ubuntu` を固定する。ユーザー名（`username`）はbootstrap.shがそのマシンに合わせて自動で書き換える |
 | [`packages.nix`](packages.nix) | CLIツール群（git・gh・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq等）。バージョンは `flake.lock` で固定される |
 | [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` と VSCode/Cursor 設定（`../vscode/` の settings.json・keybindings.json）の書き込み可能リンク、拡張機能の自動インストール（`../vscode/install-extensions.sh`）、`.claude/` 配下のリンク処理（既存 `setup.sh` をactivation時に自動実行） |
+| [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）。JIS配列・半角/全角キーでのIME切り替えという「Windowsの初期状態と同じ」挙動をdconfで宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
 
 ## 新しいUbuntuマシンのセットアップ手順
 
@@ -58,7 +59,7 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 
 ### GNOME設定を宣言化したい場合
 
-home-manager の `dconf.settings` を使えば、GNOMEのデスクトップ設定（キーリピート等）も宣言管理に含められる。現時点では未導入。
+home-manager の `dconf.settings` を使えば、GNOMEのデスクトップ設定も宣言管理に含められる。キーボード設定（JIS配列・IME切り替え）は [`keyboard.nix`](keyboard.nix) で導入済み。キーリピート等、他のGNOME設定を追加したい場合も同様に `dconf.settings` へ書き足す。
 
 ### パッケージを更新する
 
