@@ -35,11 +35,59 @@ in
   # これにより2回目以降は `home-manager switch` コマンドが使えるようになる
   programs.home-manager.enable = true;
 
+  # Nixで導入したフォント（packages.nixのnerd-fonts）をfontconfigに認識させる
+  fonts.fontconfig.enable = true;
+
+  # GNOME端末の見た目。フォントはNerd Font（Powerlevel10kのアイコン描画に必要）、
+  # 配色はmacOSターミナル「Pro」風の黒背景・白文字。ANSIカラーはApple純正だと
+  # 黒背景で青・黄が沈んで読めないため、黒背景用に設計された
+  # VS Code Dark+ 系の視認性の高いパレットを使う。
+  # UUIDはUbuntuが標準で配布する既定プロファイルのもので、マシン間で共通。
+  # GUIでプロファイルを作り直した場合はUUIDが変わるのでこの設定は効かなくなる
+  dconf.settings."org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9" = {
+    use-system-font = false;
+    font = "UbuntuMono Nerd Font Mono 13";
+    use-theme-colors = false;
+    background-color = "#000000";
+    foreground-color = "#F2F2F2";
+    palette = [
+      "#000000" # black
+      "#CD3131" # red
+      "#0DBC79" # green
+      "#E5E510" # yellow
+      "#2472C8" # blue
+      "#BC3FBC" # magenta
+      "#11A8CD" # cyan
+      "#E5E5E5" # white
+      "#666666" # bright black
+      "#F14C4C" # bright red
+      "#23D18B" # bright green
+      "#F5F543" # bright yellow
+      "#3B8EEA" # bright blue
+      "#D670D6" # bright magenta
+      "#29B8DB" # bright cyan
+      "#FFFFFF" # bright white
+    ];
+  };
+
   # ~/.zshrc はリポジトリ実体への「書き込み可能なリンク」にする。
   # home-manager標準のstore管理だと読み取り専用になり、
   # リポジトリ側を直接編集して即反映という現在の運用ができなくなるため
   home.file = {
     ".zshrc".source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/zsh/.zshrc";
+    # bashが対話起動されたらzshへ引き継ぐ（bashは使わない運用）。
+    # force = true はUbuntu標準の実体 ~/.bashrc をリンクへ置き換えるために必要
+    ".bashrc" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/zsh/.bashrc";
+      force = true;
+    };
+    # Powerlevel10kの設定（macOS風の最小構成）。
+    # force = true は `p10k configure` が実体ファイルを生成してリンクを
+    # 上書きしてしまった場合に、次回switchでリンクへ戻すため
+    ".p10k.zsh" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/zsh/.p10k.zsh";
+      force = true;
+    };
   }
   // editorUserFiles "Code" # VSCode
   // editorUserFiles "Cursor";
