@@ -11,7 +11,7 @@ Nix（home-manager standalone）でUbuntu環境を宣言的に管理するため
 | [`../flake.nix`](../flake.nix) | エントリポイント。home-manager standaloneの `homeConfigurations."ubuntu"` を定義し、ホスト名に依存しない構成名 `ubuntu` を固定する。ユーザー名（`username`）はbootstrap.shがそのマシンに合わせて自動で書き換える |
 | [`packages.nix`](packages.nix) | CLIツール群（git・gh・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq等）。バージョンは `flake.lock` で固定される |
 | [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` と VSCode/Cursor 設定（`../vscode/` の settings.json・keybindings.json）の書き込み可能リンク、拡張機能の自動インストール（`../vscode/install-extensions.sh`）、direnv + nix-direnvの導入（`.envrc` のあるディレクトリでdevShellを自動ON/OFF）、`.claude/` 配下のリンク処理（既存 `setup.sh` をactivation時に自動実行） |
-| [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）。JIS配列・半角/全角キーでのIME切り替えという「Windowsの初期状態と同じ」挙動をdconfで宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
+| [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）・Mozcのibusエンジン設定（`~/.config/mozc/ibus_config.textproto`）・カスタムxkbオプション（`~/.config/xkb`。CapsLock単押しを大文字ロックなしの半角/全角キー相当にしてIME切り替え専用にする）。JIS配列・半角/全角キーおよびCapsLockでのIME切り替えという「Windowsの初期状態と同じ」挙動を宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。Mozcのエンジンレイアウトは`"jp"`に固定（既定の`"default"`だとmozc使用中にシステム既定のusレイアウトが残り、IME切り替えキーが送出されない）。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
 
 ## 新しいUbuntuマシンのセットアップ手順
 
