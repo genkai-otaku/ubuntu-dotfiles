@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Claude Code の hook（Stop / Notification）から呼ばれ、iPhone へ Web Push 通知を送る。
+# Grok CLI も Claude 互換モード（compat.claude.hooks、デフォルト有効）で
+# ~/.claude/settings.json の同じ hooks を実行するため、このスクリプトは両対応：
+# Grok は stdin JSON が camelCase（hookEventName 等、イベント値は小文字）になるので、
+# Grok が全フックに注入する環境変数 GROK_HOOK_EVENT で判別・正規化する。
 # 送信本体は同じ dotfiles リポジトリ内の claude-notify/send-push.mjs
 # （このスクリプトも dotfiles 管理。~/.claude/hooks/notify.sh にリンクされる）。
 # 受信側の PWA は別リポジトリ claude-notify-mobile（Vercel 配信）にある。
@@ -28,6 +32,31 @@ fi
 event="$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 message="$(printf '%s' "$input" | jq -r '.message // empty' 2>/dev/null)"
+
+# Grok CLI からの呼び出し（Claude 形式の hook_event_name が無く、GROK_HOOK_EVENT がある）
+source_label=""
+if [ -z "$event" ] && [ -n "${GROK_HOOK_EVENT:-}" ]; then
+  source_label=" (Grok)"
+  case "$GROK_HOOK_EVENT" in
+    stop) event="Stop" ;;
+    notification) event="Notification" ;;
+    *) event="$GROK_HOOK_EVENT" ;;
+  esac
+
+  # Grok の Stop は応答完了以外（セッション終了時など）にも発火するため、
+  # reason == "end_turn" のときだけ通知する
+  if [ "$event" = "Stop" ]; then
+    reason="$(printf '%s' "$input" | jq -r '.reason // empty' 2>/dev/null)"
+    [ "$reason" = "end_turn" ] || exit 0
+  fi
+
+  # Grok の Notification は idle_prompt など多種のタイプを含み、
+  # idle_prompt は Stop と重複する。許可待ち（permission_prompt）だけ通知する
+  if [ "$event" = "Notification" ]; then
+    ntype="$(printf '%s' "$input" | jq -r '.notificationType // empty' 2>/dev/null)"
+    [ "$ntype" = "permission_prompt" ] || exit 0
+  fi
+fi
 
 if [ -z "$cwd" ]; then
   project="unknown"
@@ -60,7 +89,7 @@ fi
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null
 
 nohup "$NODE_BIN" "$SENDER" \
-  --title "[$project] $event" \
+  --title "[$project] $event$source_label" \
   --body "$message" \
   --event "$event" \
   --project "$project" \
