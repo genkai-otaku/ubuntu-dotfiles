@@ -40,6 +40,7 @@
           ./nix/home.nix
           ./nix/packages.nix
           ./nix/keyboard.nix
+          ./nix/desktop.nix
         ];
       };
     };
