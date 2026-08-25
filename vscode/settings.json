@@ -4,5 +4,13 @@
     "explorer.confirmDelete": false,
     "explorer.confirmDragAndDrop": false,
     "diffEditor.ignoreTrimWhitespace": false,
-    "terminal.integrated.fontFamily": "UbuntuMono Nerd Font Mono"
+    "terminal.integrated.fontFamily": "UbuntuMono Nerd Font Mono",
+    // VS Code 1.109+ は Kitty Keyboard Protocol が既定ON。xterm.js が
+    // press と release を二重に送り、Grok / Claude Code の TUI で
+    // 1キーが2文字入る。従来のキー符号化に戻す。
+    "terminal.integrated.enableKittyKeyboardProtocol": false,
+    // Alt+H/J/K/L をカーソル移動に使うため、メニューニーモニック
+    //（Alt+H = ヘルプ等）と Alt 単体でのメニューフォーカスを無効化
+    "window.enableMenuBarMnemonics": false,
+    "window.customMenuBarAltFocus": false
 }
