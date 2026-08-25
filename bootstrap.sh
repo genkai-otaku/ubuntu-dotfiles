@@ -91,5 +91,5 @@ fi
 
 echo ""
 echo "セットアップ完了！"
-echo "手動で必要な残作業（~/.claude/.line-env の配置、Docker Engineの導入など）は"
+echo "手動で必要な残作業（~/.claude/claude-notify.json の配置、Docker Engineの導入など）は"
 echo "nix/README.md を参照してください。"

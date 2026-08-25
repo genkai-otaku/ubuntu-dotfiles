@@ -43,7 +43,7 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 
 - **Docker Engineのapt導入** — Docker DesktopではなくDocker Engineを公式aptリポジトリから導入し、導入後は現在のユーザーを `docker` グループへ追加する（`sudo usermod -aG docker $USER`。反映には再ログインが必要）。Nix側の `docker`（CLI）はこのDockerデーモンに接続するクライアントとして使う
 - **GUIアプリの手動導入** — Chrome・VSCode・Slack等は宣言管理の対象外。aptリポジトリ・snap・公式debパッケージで個別に導入する（VSCode/Cursorは本体のみ手動導入で、設定・拡張機能は`vscode/`配下で宣言管理される）
-- **`~/.claude/.line-env` の手動配置** — `.claude/.line-env.example` を参考に。実トークンはコミット禁止
+- **`~/.claude/claude-notify.json` の手動配置**（iPhoneプッシュ通知を使う場合） — `.claude/claude-notify.example.json` を参考に記入する（既存PCの同ファイルをコピーでもよい）。VAPID秘密鍵を含むためコミット禁止。詳細は [`../.claude/README.md`](../.claude/README.md)
 - **各アプリへのサインイン** — Chrome同期・Docker Hub・Slack等
 
 ## よくある操作
