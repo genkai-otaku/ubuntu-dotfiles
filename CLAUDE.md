@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## リポジトリの性質
 
-Ubuntu用の個人dotfilesリポジトリ。ビルド・lint・テストは存在しない。管理対象は7つ：
+Ubuntu用の個人dotfilesリポジトリ。ビルド・lint・テストは存在しない。管理対象は9つ：
 
-- `flake.nix` + `nix/` — **Nix（home-manager standalone）によるUbuntu環境の宣言管理**（CLIツール）。`bootstrap.sh` が新Ubuntuマシンの1コマンドセットアップを担う
+- `flake.nix` + `nix/` — **Nix（home-manager standalone）によるUbuntu環境の宣言管理**（CLIツール・GNOMEデスクトップのdconf設定）。`nix/desktop.nix` がテーマ・電源管理・キーバインド・Dock等のGNOME設定を、`nix/keyboard.nix` がJIS配列・IME切り替えを宣言する。`bootstrap.sh` が新Ubuntuマシンの1コマンドセットアップを担う（Nix管理外のapt/snapアプリ導入も含む。後述）
 - `vscode/` — **VSCode / Cursor 共通の設定実体**（settings.json・keybindings.json・拡張機能リスト）。`home.nix` が両エディタのUserディレクトリ（`~/.config/{Code,Cursor}/User/`）へ書き込み可能リンクを張り、`install-extensions.sh` が activation 時に拡張機能を導入する。エディタ本体はNix管理外（apt/snap等で手動導入）のため `programs.vscode` モジュールは使わない
 - `.claude/` — Claude Codeの**グローバル設定の実体**（settings.json・CLAUDE.md・hooks・skills）
+- `git/` — **gitconfigの実体**（`.gitconfig`）。`home.nix` が `~/.zshrc` と同じ `mkOutOfStoreSymlink` 方式で `~/.gitconfig` へ書き込み可能リンクを張る（既存の実体ファイルを置き換えるため `force = true`）。credential helperはユーザー名非依存のPATH上の `gh` を使う形に正規化してある。**user.name / user.email はリポジトリ（PUBLIC）に含めない**。各PCで `~/.gitconfig.local`（git管理外）に手動配置し、`.gitconfig` 末尾の include で読み込む。gh の `co: pr checkout` エイリアスは `~/.config/gh/config.yml` をgh自身が書き換えるためファイルリンクにはせず、`home.nix` の `home.activation` で `gh alias set` を冪等に実行する
+- `grok/` — **Grok CLI（xAI）の設定実体**（`config.toml` と `AGENTS.md`）。`home.nix` が `mkOutOfStoreSymlink` で `~/.grok/config.toml`・`~/.grok/AGENTS.md` へ書き込み可能リンクを張る。`AGENTS.md` には**Grok固有の補足のみ**（CLAUDE.mdのモデル運用ポリシーのGrok向け読み替え：`spawn_subagent` / explore・plan・general-purpose の使い分け等）を書く。言語・Git制限・Nix運用などの共通ルールはGrokがClaude互換モード（デフォルト有効）で `~/.claude/CLAUDE.md` から読み込むため、AGENTS.mdに**重複させないこと**。`config.toml` の `permission_mode = "always-approve"` により、Claude側の `permissions.ask` / `pr-mode.sh`（確認ダイアログ層）はGrokでは効かない。git操作の抑止は指示ファイルに依存する。`auth.json` 等の秘密情報・キャッシュ・セッションは `~/.grok` 直下の実体のまま管理対象外。本体は `claude-code` 同様あえてNix管理外で `bootstrap.sh` が公式インストーラーで導入する
 - `zsh/` — zsh設定（`zsh/.zshrc`）。Oh My Zsh + Powerlevel10k テーマを使用し、本体は `bootstrap.sh` が `~/.oh-my-zsh` へ導入（あえてNix管理外）。direnv フックもここへ直書きする。`zsh/.bashrc` は対話bashを即zshへexecする引き継ぎ用（bashは使わない運用。`NO_ZSH=1 bash` で回避可）
 - `claude-notify/` — iPhoneへのWeb Push通知の**送信側スクリプト**（`send-push.mjs`）。詳細は後述の「iPhoneプッシュ通知の仕組み」参照
 - `.github/workflows/` — **他リポジトリへコピーして使う配布用テンプレート**。ただしリポジトリ内に置かれている以上、`delete-merged-branch.yml`（PRマージ時のブランチ自動削除）は**このリポジトリ自身のPRにも発火する**
@@ -24,7 +26,7 @@ Ubuntu用の個人dotfilesリポジトリ。ビルド・lint・テストは存�
 
 ## アーキテクチャ：Nixによる環境管理
 
-`flake.nix` がエントリポイントで、`nix/` 配下の2モジュール（packages.nix / home.nix）を統合する。設計上の不変条件が多いので、編集時は以下を守ること：
+`flake.nix` がエントリポイントで、`nix/` 配下の4モジュール（home.nix / packages.nix / keyboard.nix / desktop.nix）を統合する。設計上の不変条件が多いので、編集時は以下を守ること：
 
 - **構成名はホスト名非依存の `ubuntu` 固定**。適用コマンドは常に `--flake <リポジトリ>#ubuntu` と明示する（ホスト名によるフォールバックは意図的に使っていない）
 - **`username` はハードコードが正**。flakeは純粋評価で環境変数を読めないため、`bootstrap.sh` がクローン時に `sed` でそのマシンの実ユーザー名へ書き換える設計。`dotfilesPath` は username から導出され、リポジトリ配置は `~/Dev/kaishi/ubuntu-dotfiles` 固定
@@ -83,6 +85,7 @@ git commit / git push / PR作成の制御は三層で成り立っており、**�
 
 - notify.sh は自身の実体パス（`readlink -f`）から dotfiles ルートを解決して送信スクリプトを見つける。環境変数 `CLAUDE_NOTIFY_REPO` は不要になった（PCごとのパス差はリンク解決で吸収される）
 - notify.sh は**何が起きても即 exit 0**（送信スクリプト・jq・nodeの欠如、依存未インストールでも静かに終了し、Claude Codeを止めない）。送信はnohupでバックグラウンド実行
+- **Grok CLI からも同じ通知が飛ぶ**。Grok は Claude 互換モード（`compat.claude.hooks`、デフォルト有効）で `~/.claude/settings.json` の hooks を自動実行するため追加登録は不要。ただし Grok の stdin JSON は camelCase（`hookEventName` 等）のため、notify.sh は環境変数 `GROK_HOOK_EVENT` で判別してイベント名を正規化し、通知スパム防止のため **Stop は `reason == "end_turn"` のみ・Notification は `notificationType == "permission_prompt"` のみ**送信する（idle_prompt は Stop と重複するため捨てる）。タイトルには「(Grok)」を付けて区別する
 - 送信スクリプトは `web-push` に依存する。`claude-notify/node_modules` は `.gitignore` 対象で、`nix/home.nix` の `home.activation.installClaudeNotifyDeps` が `home-manager switch` 時に `pnpm install --frozen-lockfile` を実行して用意する（失敗してもsoft failでswitchは止めない）
 - VAPID鍵・購読情報は `~/.claude/claude-notify.json` に手動配置する（リポジトリには `claude-notify.example.json` のみ含める。**記入済みファイルは秘密鍵を含むため絶対にコミットしない**）
 - 実行ログは `~/.claude/claude-notify.log` に追記される

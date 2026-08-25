@@ -7,11 +7,12 @@ Nix（home-manager standalone）でUbuntu環境を宣言的に管理するため
 
 | ファイル | 役割 |
 |---|---|
-| [`../bootstrap.sh`](../bootstrap.sh) | 新しいUbuntuマシンの1コマンドセットアップ。`~/Dev/kaishi` の作成・クローン・ユーザー名の自動書き換え・初回適用までを行う |
+| [`../bootstrap.sh`](../bootstrap.sh) | 新しいUbuntuマシンの1コマンドセットアップ。クローン・username書き換え・home-manager適用に加え、Oh My Zsh・Claude Code / Grok CLI・IME・VSCode / Slack / Chrome まで冪等に導入する |
 | [`../flake.nix`](../flake.nix) | エントリポイント。home-manager standaloneの `homeConfigurations."ubuntu"` を定義し、ホスト名に依存しない構成名 `ubuntu` を固定する。ユーザー名（`username`）はbootstrap.shがそのマシンに合わせて自動で書き換える |
-| [`packages.nix`](packages.nix) | CLIツール群（git・gh・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq等）。バージョンは `flake.lock` で固定される |
-| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` と VSCode/Cursor 設定（`../vscode/` の settings.json・keybindings.json）の書き込み可能リンク、拡張機能の自動インストール（`../vscode/install-extensions.sh`）、direnv + nix-direnvの導入（`.envrc` のあるディレクトリでdevShellを自動ON/OFF）、`.claude/` 配下のリンク処理（既存 `setup.sh` をactivation時に自動実行） |
+| [`packages.nix`](packages.nix) | CLIツール群（git・gh・vim・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq）と Nerd Font（UbuntuMono）。バージョンは `flake.lock` で固定される |
+| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` / `~/.bashrc` / `~/.p10k.zsh` / `~/.gitconfig` / Grok 設定 / VSCode/Cursor 設定の書き込み可能リンク、拡張機能の自動インストール、direnv + nix-direnv、`.claude/` の setup.sh、claude-notify の `pnpm install`、gh の `co` エイリアス、GNOME Terminal のフォント・配色・透明度・サイズ、既定ブラウザ（Chrome） |
 | [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）・Mozcのibusエンジン設定（`~/.config/mozc/ibus_config.textproto`）・カスタムxkbオプション（`~/.config/xkb`。CapsLock単押しを大文字ロックなしの半角/全角キー相当にしてIME切り替え専用にする）。JIS配列・半角/全角キーおよびCapsLockでのIME切り替えという「Windowsの初期状態と同じ」挙動を宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。Mozcのエンジンレイアウトは`"jp"`に固定（既定の`"default"`だとmozc使用中にシステム既定のusレイアウトが残り、IME切り替えキーが送出されない）。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
+| [`desktop.nix`](desktop.nix) | GNOMEデスクトップ設定（`dconf.settings`）。ダークテーマ（Yaruパープル）、ウィンドウボタンの左上配置、画面ロック/自動スリープ無効、マウス速度、Dock常駐アプリ、dash-to-dock / tiling-assistant、GNOME Terminal の Ctrl+C/V、ロック画面への通知オフなど。キーボード配列は `keyboard.nix`、端末のフォント・配色は `home.nix` |
 
 ## 新しいUbuntuマシンのセットアップ手順
 
@@ -28,7 +29,15 @@ curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/boots
 3. `~/Dev/kaishi` を作成してリポジトリをクローン
 4. `flake.nix` の `username` をそのマシンの実際のユーザー名に書き換え
 5. home-managerの初回適用
-6. ログインシェルをzshへ変更（`chsh`）＋ Claude Code CLIの導入（常に最新版を使うため、Nix管理ではなく公式インストーラーの自動更新版を採用）
+6. ログインシェルをzshへ変更（`chsh`）
+7. Oh My Zsh と Powerlevel10k を導入（あえてNix管理外。`~/.oh-my-zsh` へ git clone）
+8. Claude Code CLIの導入（常に最新版を使うため、Nix管理ではなく公式インストーラーの自動更新版を採用）
+9. ibus-mozc / mozc-utils-gui をaptで導入
+10. VSCode（`code --classic`）と Slack をsnapで導入
+11. Google Chrome を公式debで導入
+12. Grok CLIの導入（公式インストーラーの自動更新版。あえてNix管理外）
+
+ステップ5の初回 `home-manager switch` はステップ10の VSCode 導入より先に走るため、その時点では拡張機能のインストールはスキップされる。bootstrap完了後にもう一度 `home-manager switch` すれば入る。9〜11 はsudoが使えない環境では警告してスキップする。
 
 ユーザー名が書き換わった場合は、適用後に `flake.nix` の差分をコミットしておく。
 
@@ -41,10 +50,13 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 
 ### 手動で必要な操作（自動化できないもの）
 
-- **Docker Engineのapt導入** — Docker DesktopではなくDocker Engineを公式aptリポジトリから導入し、導入後は現在のユーザーを `docker` グループへ追加する（`sudo usermod -aG docker $USER`。反映には再ログインが必要）。Nix側の `docker`（CLI）はこのDockerデーモンに接続するクライアントとして使う
-- **GUIアプリの手動導入** — Chrome・VSCode・Slack等は宣言管理の対象外。aptリポジトリ・snap・公式debパッケージで個別に導入する（VSCode/Cursorは本体のみ手動導入で、設定・拡張機能は`vscode/`配下で宣言管理される）
-- **`~/.claude/claude-notify.json` の手動配置**（iPhoneプッシュ通知を使う場合） — `.claude/claude-notify.example.json` を参考に記入する（既存PCの同ファイルをコピーでもよい）。VAPID秘密鍵を含むためコミット禁止。詳細は [`../.claude/README.md`](../.claude/README.md)
-- **各アプリへのサインイン** — Chrome同期・Docker Hub・Slack等
+- **Docker Engine** — 公式aptから導入し、ユーザーを `docker` グループへ追加する（`sudo usermod -aG docker $USER`。再ログインが必要）。Nix の `docker` はデーモンへ接続する CLI
+- **Cursor** — 使う場合のみ手動導入（Chrome / VSCode / Slack / ibus-mozc は bootstrap が導入する。設定と拡張機能は `vscode/`）
+- **`~/.gitconfig.local`** — `user.name` / `user.email`（PUBLIC に含めない。`git/.gitconfig` 末尾の include で読む）
+- **`~/.claude/claude-notify.json`** — iPhone 通知を使う場合。example をコピー。VAPID 秘密鍵のためコミット禁止。詳細は [`../.claude/README.md`](../.claude/README.md)
+- **サインイン** — Chrome、Slack、`gh auth login`、SSH 鍵
+
+日本語 Ubuntu（`ja_JP.UTF-8`、`Asia/Tokyo`）を想定する。英語版から入れた場合はタイムゾーンとロケールを合わせる。
 
 ## よくある操作
 
@@ -57,9 +69,13 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 
 宣言管理の対象外。apt（`apt install`）またはsnap（`snap install`）で手動導入・削除する。
 
-### GNOME設定を宣言化したい場合
+### GNOME設定を変更する
 
-home-manager の `dconf.settings` を使えば、GNOMEのデスクトップ設定も宣言管理に含められる。キーボード設定（JIS配列・IME切り替え）は [`keyboard.nix`](keyboard.nix) で導入済み。キーリピート等、他のGNOME設定を追加したい場合も同様に `dconf.settings` へ書き足す。
+- 見た目・電源・Dock・端末キーバインド等 → [`desktop.nix`](desktop.nix)
+- キーボード配列・IME切り替え → [`keyboard.nix`](keyboard.nix)
+- GNOME Terminal のフォント・配色・透明度・サイズ → [`home.nix`](home.nix) のプロファイル設定（UUIDはUbuntu既定のもの）
+
+いずれも `dconf.settings`。追加・変更したら `home-manager switch`。GUIから変えた内容は次回switchで宣言値に戻る。
 
 ### パッケージを更新する
 

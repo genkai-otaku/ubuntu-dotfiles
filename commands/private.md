@@ -1,5 +1,7 @@
 # コマンド
 
+ルート README のコマンド節からの個人用早見表。詳細・設計理由は各ディレクトリの README を見る。
+
 ## Claude Code
 
 ### Skills
@@ -35,6 +37,13 @@ curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/boots
 ```zsh
 home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 ```
+
+### 手動残作業（新マシン）
+
+- `~/.gitconfig.local` に `user.name` / `user.email`
+- `~/.claude/claude-notify.json`（iPhone通知を使う場合）
+- Docker Engine + `docker` グループ
+- `gh auth login`、SSH鍵、各アプリへのサインイン
 
 ### パッケージの更新
 
