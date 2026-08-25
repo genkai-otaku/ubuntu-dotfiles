@@ -25,6 +25,10 @@ Grok CLI（xAI）の設定実体。適用は [nix/home.nix](../nix/home.nix) が
 
 `config.toml` の `permission_mode = "always-approve"` は Grok 側の確認ダイアログを出さない設定。Claude Code の `permissions.ask` と `hooks/pr-mode.sh`（確認ダイアログを `/pr` 中だけ自動承認する層）は Grok では効かない。Grok での git commit / push / PR作成の抑止は `~/.claude/CLAUDE.md` とこの `AGENTS.md` の指示に依存する。
 
+## VSCode 統合ターミナルの日本語IME
+
+Grok を VSCode の統合ターミナルで使うと、Mozc の変換中プレビューが確定扱いされ「この」が「ｋこｎこのこの」になることがある。Grok 側の設定ではなく ibus / エディタ側の問題。本体の対策は [`../nix/keyboard.nix`](../nix/keyboard.nix) の `embed-preedit-text = false`。経緯と補助設定は [`../vscode/README.md`](../vscode/README.md) の「統合ターミナルの日本語IME」を見る。
+
 ## リンクが実体化したとき
 
 Grok 自身が `config.toml` へ書き込む。書き込み可能リンクなら変更はリポジトリ側に届くが、シンボリックリンクを実体ファイルで置き換える場合がある。`home.nix` は `force = true` なので次回 `home-manager switch` でリンクに戻る。実体側に新しいキーが増えていたら、switch する前にリポジトリの `config.toml` へ取り込んでおく。

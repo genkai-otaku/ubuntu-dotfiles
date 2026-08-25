@@ -120,6 +120,13 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/AGENTS.md";
       force = true;
     };
+    # VSCode 起動ラッパー。snap の electron-launch が GDK_BACKEND=wayland と
+    # --ozone-platform=x11 を同時に立て、IME が二重になって TUI へ変換中プレビュー
+    # が漏れるのを、DISABLE_WAYLAND=1 + GDK_BACKEND=x11 + GTK_IM_MODULE=xim で一本化する。
+    # ~/.local/bin は PATH 上 /snap/bin より前。本体はラッパーが /snap/bin/code を exec する
+    ".local/bin/code" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/vscode/code";
+    };
   }
   // editorUserFiles "Code" # VSCode
   // editorUserFiles "Cursor";
@@ -153,8 +160,8 @@ in
 
   # 既定ブラウザを Google Chrome にする（Dock先頭・bootstrap導入と揃える）。
   # xdg-open や GNOME のリンク開きが Firefox（Ubuntu既定snap）に流れないようにする。
-  # force = true は Ubuntu が既に作っている実体 ~/.config/mimeapps.list を
-  # 置き換えるために必要
+  # force = true は Ubuntu が既に作っている実体をリンクへ置き換えるために必要。
+  # mimeApps は ~/.config と ~/.local/share/applications の両方に書く
   xdg.mimeApps = {
     enable = true;
     defaultApplications = {
@@ -166,6 +173,53 @@ in
     };
   };
   xdg.configFile."mimeapps.list".force = true;
+  xdg.dataFile."applications/mimeapps.list".force = true;
+
+  # ドック／アプリ一覧からの起動は PATH を見ないため、snap の desktop を
+  # ユーザー側で上書きしてラッパー経由にする。ID は snap と同じ code_code.desktop
+  xdg.dataFile."applications/code_code.desktop".text = ''
+    [Desktop Entry]
+    X-SnapInstanceName=code
+    Name=Visual Studio Code
+    Comment=Code Editing. Redefined.
+    GenericName=Text Editor
+    X-SnapAppName=code
+    X-SnapCommonID=code.desktop
+    Exec=${config.home.homeDirectory}/.local/bin/code --force-user-env %F
+    Icon=/snap/code/current/meta/gui/vscode.png
+    Type=Application
+    StartupNotify=false
+    StartupWMClass=Code
+    Categories=TextEditor;Development;IDE;
+    MimeType=application/x-code-workspace;
+    Actions=new-empty-window;
+    Keywords=vscode;
+
+    [Desktop Action new-empty-window]
+    Name=New Empty Window
+    Name[ja]=新しい空のウィンドウ
+    X-SnapAppName=code
+    X-SnapCommonID=code.desktop
+    Exec=${config.home.homeDirectory}/.local/bin/code --force-user-env --new-window %F
+    Icon=/snap/code/current/meta/gui/vscode.png
+  '';
+  xdg.dataFile."applications/code_code-url-handler.desktop".text = ''
+    [Desktop Entry]
+    X-SnapInstanceName=code
+    Name=Visual Studio Code - URL Handler
+    Comment=Code Editing. Redefined.
+    GenericName=Text Editor
+    X-SnapAppName=code
+    X-SnapCommonID=code.desktop
+    Exec=${config.home.homeDirectory}/.local/bin/code --force-user-env --open-url %U
+    Icon=/snap/code/current/meta/gui/vscode.png
+    Type=Application
+    NoDisplay=true
+    StartupNotify=true
+    Categories=Utility;TextEditor;Development;IDE;
+    MimeType=x-scheme-handler/vscode;
+    Keywords=vscode;
+  '';
 
   # iPhoneプッシュ通知の送信スクリプト（claude-notify/send-push.mjs）は
   # web-push に依存するため、node_modules を activation 時に用意する。

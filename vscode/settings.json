@@ -9,8 +9,22 @@
     // press と release を二重に送り、Grok / Claude Code の TUI で
     // 1キーが2文字入る。従来のキー符号化に戻す。
     "terminal.integrated.enableKittyKeyboardProtocol": false,
+    // Grok / Claude Code は入力のたびに画面を打ち直す TUI。local echo
+    // （入力先読み）が Mozc の変換中プレビューをバッファへ焼き込み、
+    // 確定文字と混ざって「ｋこｎこのこの」になる。
+    "terminal.integrated.localEchoEnabled": "off",
     // Alt+H/J/K/L をカーソル移動に使うため、メニューニーモニック
     //（Alt+H = ヘルプ等）と Alt 単体でのメニューフォーカスを無効化
     "window.enableMenuBarMnemonics": false,
-    "window.customMenuBarAltFocus": false
+    "window.customMenuBarAltFocus": false,
+    // Linux の既定は custom タイトルバーで、閉じる/最小化/最大化が
+    // 右上固定になる。GNOME（desktop.nix の button-layout）と同じ
+    // macOS 風の左上配置にするため、OS ネイティブのタイトルバーを使う。
+    // native のままだとメニューがタイトルバー直下の二段目になり縦を食う。
+    // compact は titleBarStyle=native かつ menuStyle が native/inherit だと
+    // 無視されるので、custom にしてサイドバーのハンバーガーへ移す。
+    // 反映には VS Code / Cursor の再起動が必要。
+    "window.titleBarStyle": "native",
+    "window.menuStyle": "custom",
+    "window.menuBarVisibility": "compact"
 }

@@ -13,7 +13,9 @@
 
     # ウィンドウボタンをmacOSと同じ左上配置にする（閉じる・最小化・最大化）。
     # コロンより左がタイトルバー左側、右が右側。Ubuntu既定は
-    # ':minimize,maximize,close'（全部右上）
+    # ':minimize,maximize,close'（全部右上）。
+    # VSCode / Cursor は独自タイトルバーのためこの値を無視する。
+    # 左上かつ一段にする設定は vscode/settings.json（詳細は vscode/README.md）
     "org/gnome/desktop/wm/preferences" = {
       button-layout = "close,minimize,maximize:";
     };

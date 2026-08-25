@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# VSCode 起動ラッパー。Grok / Claude Code の TUI で日本語 IME が
+# 「この」→「ｋこｎこのこの」になるのを防ぐ。
+#
+# 原因:
+#   snap の electron-launch は Wayland を検出すると GDK_BACKEND=wayland を
+#   立てつつ末尾で --ozone-platform=x11 を強制する。GTK 側は wayland IM
+#   （変換中プレビューを埋め込む）、Chromium 側は X11/XIM と二重になり、
+#   Mozc の未確定文字が PTY へ確定扱いされる。
+#   加えて snap 同梱の GTK IM に im-ibus.so が無く、GTK_IM_MODULE=ibus は使えない。
+#
+# 対策:
+#   DISABLE_WAYLAND=1 と GDK_BACKEND=x11 で GTK を X11 に揃え、
+#   GTK_IM_MODULE=xim で snap 同梱の im-xim.so → XMODIFIERS=@im=ibus
+#   の一本にまとめる。
+set -euo pipefail
+
+export DISABLE_WAYLAND=1
+export GDK_BACKEND=x11
+export GTK_IM_MODULE=xim
+
+real=""
+for candidate in /snap/bin/code /usr/bin/code /usr/share/code/bin/code; do
+  if [ -x "$candidate" ]; then
+    real="$candidate"
+    break
+  fi
+done
+
+if [ -z "$real" ]; then
+  echo "code: VSCode 本体が見つかりません" >&2
+  exit 127
+fi
+
+exec "$real" "$@"

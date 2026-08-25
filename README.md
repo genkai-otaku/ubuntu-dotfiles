@@ -26,9 +26,9 @@ dotfiles/
 ├── nix/
 │   ├── README.md          # Nix運用の詳細ドキュメント
 │   ├── packages.nix       # CLIツール（git・gh・vim・Node.js等。Nixで管理）
-│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ）
-│   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え）
-│   └── desktop.nix        # GNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等のdconf宣言）
+│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ）
+│   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え・TUI向け embed-preedit-text=false）
+│   └── desktop.nix        # GNOMEデスクトップ設定（テーマ・電源・キーバインド・Dock・ウィンドウボタン左上。VSCode側は vscode/）
 ├── git/
 │   ├── README.md
 │   └── .gitconfig         # gitconfigの実体（home.nixが~/.gitconfigへ書き込み可能リンク。user.name/emailは~/.gitconfig.localに手動配置）
@@ -37,9 +37,10 @@ dotfiles/
 │   ├── config.toml        # Grok CLI（xAI）の設定実体（home.nixが~/.grok/config.tomlへ書き込み可能リンク）
 │   └── AGENTS.md          # Grokのグローバル指示（Grok固有の補足のみ。共通ルールはClaude互換で.claude/CLAUDE.mdが読まれる）
 ├── vscode/
-│   ├── README.md          # VSCode/Cursor共通設定の詳細ドキュメント
+│   ├── README.md          # VSCode/Cursor共通設定の詳細ドキュメント（統合ターミナルの日本語IME含む）
 │   ├── settings.json      # エディタ設定の実体（両エディタで共有）
 │   ├── keybindings.json   # キーバインドの実体（両エディタで共有）
+│   ├── code               # snap VSCodeのIME用起動ラッパー（home.nixが~/.local/bin/codeへリンク）
 │   ├── extensions.txt     # 導入する拡張機能のIDリスト
 │   └── install-extensions.sh # 拡張機能をVSCode/Cursorへ導入（activation時に自動実行）
 ├── commands/
