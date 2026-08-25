@@ -12,6 +12,13 @@ plugins=(git)
 # 未導入環境でも壊れないようにガードする
 [[ -d $ZSH ]] && source "$ZSH/oh-my-zsh.sh"
 
+# Oh My Zshが LESS=-R を設定してしまい、`git branch` 等の短い出力でも
+# 全画面のページャーが開いて終了時に消える挙動になるため上書きする。
+# -F: 1画面に収まる出力はページャーを開かずそのまま表示
+# -R: 色エスケープをそのまま通す
+# -X: ページャー終了時に画面を復元しない（出力が残る）
+export LESS='-FRX'
+
 # Powerlevel10kの設定（zsh/.p10k.zsh をリポジトリで管理。macOS風の最小構成）
 [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 
