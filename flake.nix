@@ -1,5 +1,5 @@
 {
-  description = "peipou's Ubuntu environment (home-manager standalone)";
+  description = "Ubuntu environment (home-manager standalone)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";

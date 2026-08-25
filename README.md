@@ -7,9 +7,10 @@ Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する
 - Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`）
 - Zsh（ターミナルプロンプト設定）
 - VSCode / Cursor（`vscode/`配下の共通設定をhome-manager経由で書き込み可能リンクし、拡張機能をactivation時に自動導入）
-- Bash（`bootstrap.sh`、`.claude/setup.sh`、`hooks/`配下のシェルスクリプト）
+- direnv / nix-direnv（`nix/home.nix`のhome-manager設定で導入。`.envrc`のあるプロジェクトディレクトリでflakeのdevShellを自動ON/OFF）
+- Bash（`bootstrap.sh`、`.claude/setup.sh`、`.claude/hooks/`配下のシェルスクリプト）
 - Claude Code（`settings.json` / `CLAUDE.md` / Skills / Hooksによるグローバル設定管理）
-- LINE Messaging API（`curl` + `jq`で通知連携）
+- Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Stop/Notification時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
 - GitHub Actions（`.github/workflows/`配下で共通ワークフローを管理し、他リポジトリへ配布）
 - GitHub CLI（`gh`、`/pr`スキル内でPR作成に使用）
 
@@ -19,11 +20,12 @@ dotfiles/
 ├── README.md
 ├── CLAUDE.md              # リポジトリのアーキテクチャ・運用ルール（Claude Code向け）
 ├── flake.nix              # Nix環境のエントリポイント（home-manager standalone）
+├── flake.lock             # パッケージバージョンの固定（`nix flake update`後は必ずコミット）
 ├── bootstrap.sh           # 新しいUbuntuマシンの1コマンドセットアップ
 ├── nix/
 │   ├── README.md          # Nix運用の詳細ドキュメント
 │   ├── packages.nix       # CLIツール（git・gh・Node.js等。Nixで管理）
-│   └── home.nix           # home-manager設定（zsh・VSCode/Cursor設定のリンクと拡張機能導入・.claude/のリンク処理）
+│   └── home.nix           # home-manager設定（zsh・VSCode/Cursor設定のリンクと拡張機能導入・direnv導入・.claude/のリンク処理・claude-notifyの依存導入）
 ├── vscode/
 │   ├── README.md          # VSCode/Cursor共通設定の詳細ドキュメント
 │   ├── settings.json      # エディタ設定の実体（両エディタで共有）
@@ -37,15 +39,19 @@ dotfiles/
 │   └── workflows/
 │       └── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
 ├── zsh/
-│   ├── .zshrc            # プロンプト表示のカスタマイズ
+│   ├── .zshrc            # プロンプト表示のカスタマイズと direnv フック
 │   └── README.md
+├── claude-notify/         # iPhoneプッシュ通知の送信スクリプト（.claude/hooks/notify.sh から呼ばれる）
+│   ├── send-push.mjs     # Web Push送信本体（VAPID署名。設定は ~/.claude/claude-notify.json）
+│   ├── package.json      # 依存は web-push のみ
+│   └── pnpm-lock.yaml    # node_modules は activation 時に自動導入（gitignore）
 └── .claude/
     ├── CLAUDE.md          # 言語指定・Git操作制限などの共通指示
     ├── settings.json      # フック・permissions・languageなどの設定
     ├── setup.sh           # .claude/ 配下を ~/.claude へシンボリックリンク
-    ├── .line-env.example  # LINEアクセストークン設定のテンプレート
+    ├── claude-notify.example.json # iPhoneプッシュ通知設定のテンプレート（~/.claude/claude-notify.json へコピー）
     ├── hooks/
-    │   ├── notify-line.sh # Stop/Notification時にLINEへ通知
+    │   ├── notify.sh      # Stop/Notification時にiPhoneへWeb Push通知
     │   └── pr-mode.sh     # /pr 実行中だけgit操作を自動許可
     ├── skills/
     │   ├── pr/SKILL.md            # /pr スキル

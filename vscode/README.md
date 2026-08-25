@@ -10,7 +10,7 @@ VSCodeとCursorの設定の**実体**を置くディレクトリ。CursorはVSCo
 |---|---|
 | [`settings.json`](settings.json) | エディタ設定の実体（両エディタで共有） |
 | [`keybindings.json`](keybindings.json) | キーバインドの実体（両エディタで共有） |
-| [`extensions.txt`](extensions.txt) | 導入する拡張機能のIDリスト（1行1ID） |
+| [`extensions.txt`](extensions.txt) | 導入する拡張機能のIDリスト（1行1ID、`#` で始まる行はコメント）。 |
 | [`install-extensions.sh`](install-extensions.sh) | `extensions.txt` の拡張機能をVSCode/Cursorへ導入するスクリプト。`home-manager switch` 時にhome-manager activationから自動実行される |
 
 ## 仕組みと設計理由
