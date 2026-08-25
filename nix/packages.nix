@@ -7,6 +7,7 @@
     # バージョン管理
     git
     gh
+    vim # gitconfigの diff.tool = vimdiff に必要
 
     # JavaScript / Node.js
     nodejs_26

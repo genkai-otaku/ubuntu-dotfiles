@@ -47,10 +47,21 @@ in
   # GUIでプロファイルを作り直した場合はUUIDが変わるのでこの設定は効かなくなる
   dconf.settings."org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9" = {
     use-system-font = false;
-    font = "UbuntuMono Nerd Font Mono 13";
+    font = "UbuntuMono Nerd Font Mono 10";
     use-theme-colors = false;
     background-color = "#000000";
     foreground-color = "#F2F2F2";
+    # Ubuntu既定の 80x24 より広いサイズ
+    default-size-columns = 120;
+    default-size-rows = 30;
+    bold-color-same-as-fg = true;
+    bold-is-bright = true;
+    audible-bell = false;
+    # 黒背景のまま 20% 透過。use-theme-transparency を切らないと
+    # テーマ側の透過設定に上書きされる
+    use-theme-transparency = false;
+    use-transparent-background = true;
+    background-transparency-percent = 20;
     palette = [
       "#000000" # black
       "#CD3131" # red
@@ -89,6 +100,26 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/zsh/.p10k.zsh";
       force = true;
     };
+    # git設定。force = true は既存の実体ファイル ~/.gitconfig をリンクへ
+    # 置き換えるために必要。user.name / user.email はリポジトリに含めず、
+    # 各PCで手動配置する ~/.gitconfig.local（git管理外）から include される
+    ".gitconfig" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/git/.gitconfig";
+      force = true;
+    };
+    # Grok CLI の設定。grok 自身もこのファイルへ書き込むため、書き込み可能
+    # リンクにして変更をリポジトリ側へ取り込む（VSCode設定と同じ方式）。
+    # force = true は既存実体ファイルの置き換え用
+    ".grok/config.toml" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/config.toml";
+      force = true;
+    };
+    # Grok CLI のグローバル指示ファイル（Grok固有の補足のみ。共通ルールは
+    # Claude互換モードで ~/.claude/CLAUDE.md から読み込まれるため重複させない）
+    ".grok/AGENTS.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/AGENTS.md";
+      force = true;
+    };
   }
   // editorUserFiles "Code" # VSCode
   // editorUserFiles "Cursor";
@@ -120,6 +151,22 @@ in
     nix-direnv.enable = true;
   };
 
+  # 既定ブラウザを Google Chrome にする（Dock先頭・bootstrap導入と揃える）。
+  # xdg-open や GNOME のリンク開きが Firefox（Ubuntu既定snap）に流れないようにする。
+  # force = true は Ubuntu が既に作っている実体 ~/.config/mimeapps.list を
+  # 置き換えるために必要
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications = {
+      "text/html" = "google-chrome.desktop";
+      "x-scheme-handler/http" = "google-chrome.desktop";
+      "x-scheme-handler/https" = "google-chrome.desktop";
+      "x-scheme-handler/about" = "google-chrome.desktop";
+      "x-scheme-handler/unknown" = "google-chrome.desktop";
+    };
+  };
+  xdg.configFile."mimeapps.list".force = true;
+
   # iPhoneプッシュ通知の送信スクリプト（claude-notify/send-push.mjs）は
   # web-push に依存するため、node_modules を activation 時に用意する。
   # node_modules はリポジトリ管理外（.gitignore）なので、新しいUbuntuマシンでも
@@ -132,5 +179,14 @@ in
       cd "${dotfilesPath}/claude-notify" &&
         "${pkgs.pnpm}/bin/pnpm" install --frozen-lockfile
     ' || echo "警告: claude-notify の依存インストールに失敗しました（iPhone通知は無効のまま。ネットワーク接続後に手動で 'cd ${dotfilesPath}/claude-notify && pnpm install' を実行してください）"
+  '';
+
+  # gh は ~/.config/gh/config.yml を自分で書き換えるツールなのでファイルリンクでは
+  # 管理せず、activation で `gh alias set` を実行して co: pr checkout のエイリアスを
+  # 冪等に設定する。--clobber は既存エイリアスがあっても上書きして冪等にするため。
+  # gh未導入やネットワーク不通でも switch を止めない
+  home.activation.setGhAlias = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${pkgs.gh}/bin/gh alias set co "pr checkout" --clobber \
+      || echo "警告: gh のエイリアス設定に失敗しました（gh未導入またはネットワーク不通の可能性）"
   '';
 }
