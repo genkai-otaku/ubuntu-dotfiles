@@ -10,16 +10,17 @@ VSCodeとCursorの設定の**実体**を置くディレクトリ。CursorはVSCo
 |---|---|
 | [`settings.json`](settings.json) | エディタ設定の実体（両エディタで共有） |
 | [`keybindings.json`](keybindings.json) | キーバインドの実体（両エディタで共有） |
-| [`extensions.txt`](extensions.txt) | 導入する拡張機能のIDリスト（1行1ID） |
+| [`extensions.txt`](extensions.txt) | 導入する拡張機能のIDリスト（1行1ID、`#` で始まる行はコメント）。 |
 | [`install-extensions.sh`](install-extensions.sh) | `extensions.txt` の拡張機能をVSCode/Cursorへ導入するスクリプト。`home-manager switch` 時にhome-manager activationから自動実行される |
 
 ## 仕組みと設計理由
 
-- エディタ本体はNix管理外（apt・snap・公式debパッケージ等で手動導入）。そのためhome-managerの `programs.vscode` モジュール（Nix製VSCodeの導入が前提）は使わず、設定ファイルは `mkOutOfStoreSymlink`、拡張機能はactivationスクリプトで管理する
+- エディタ本体はNix管理外。VSCode は `bootstrap.sh` が snap（`code --classic`）で導入し、Cursor は使う場合のみ手動導入。そのためhome-managerの `programs.vscode` モジュール（Nix製VSCodeの導入が前提）は使わず、設定ファイルは `mkOutOfStoreSymlink`、拡張機能はactivationスクリプトで管理する
 - リンクは書き込み可能。home-manager標準のstore管理だと設定が読み取り専用になり、エディタのUIから変更できなくなるため、`~/.zshrc` と同じ方式を採る
 - 拡張機能は「ファイル」ではなく「インストール状態」なのでリンクでは管理できない。`install-extensions.sh` がリストとの差分だけをインストールする。エディタ本体が未導入ならそのエディタをスキップし、次回のswitchで冪等にリトライされる
 - activation環境のPATHに依存しないよう、CLIは既知の絶対パス候補（deb版 `/usr/bin/code`・snap版 `/snap/bin/code`・`~/.local/bin/cursor` 等）を先に探し、見つからなければ `command -v` にフォールバックする
-- キーバインドはmacOS版dotfilesと同内容だが、チャット新規作成のみ `cmd+l` → `alt+l` に変更している（LinuxのSuper+LはGNOMEの画面ロックと衝突するため）
+- キーバインドはmacOS版dotfilesをLinux向けに差し替えている。カーソル移動は Vim 風の `alt+h/j/k/l`（左/下/上/右。Shift併用で選択）。Linuxのメニューニーモニック（`alt+h` がヘルプ等）と衝突するため、`settings.json` で `window.enableMenuBarMnemonics` と `window.customMenuBarAltFocus` を無効化している。チャット新規作成は Linux 既定の `ctrl+l` のまま（macOSの `cmd+l` 相当。Super+LはGNOMEの画面ロック）。統合ターミナルのコピー/ペーストは `ctrl+c` / `ctrl+v`（Linux既定の `ctrl+shift+c/v` を他アプリと揃える。`ctrl+c` は選択中のみコピーし、未選択時はSIGINT。選択中にコマンドを止める用途で `ctrl+shift+c` はコピーを外して SIGINT を送る）。移動キーは `textInputFocus && !terminalFocus` に限定し、Grok / Claude Code のTUIへキーを渡す
+- `settings.json` の `terminal.integrated.enableKittyKeyboardProtocol` は `false`。VS Code 1.109以降はKitty Keyboard Protocolが既定ONで、xterm.jsがpress/releaseを二重送信し、TUIで1キーが2文字入るため
 
 ## よくある操作
 
@@ -40,4 +41,4 @@ VSCodeとCursorの設定の**実体**を置くディレクトリ。CursorはVSCo
 - 設定は両エディタで完全共有。片方だけに効かせる運用は想定していない（必要なら `home.nix` の `editorUserFiles` を分割する）
 - `home.nix` 側の `force = true` は初回適用時に既存の実体ファイルをリンクへ置き換えるためのもの。別のマシンへ初適用する際、そのマシン固有の設定があれば先にこのディレクトリへ取り込んでおくこと
 - このディレクトリのファイルはflake評価時には読まれず、適用時に絶対パスで参照されるだけ。追加・変更に `git add` は不要だが、新しいマシンへ配るにはコミットとpushが必要（`bootstrap.sh` はGitHub上のmainをクローンするため）
-- 新しいUbuntuマシンではエディタ本体の導入が手動のため、`bootstrap.sh` 実行時点でエディタが未導入なら拡張機能の導入はスキップされる。エディタを導入した後にもう一度 `home-manager switch` を実行すれば導入される
+- `bootstrap.sh` の初回 `home-manager switch`（ステップ5）は VSCode の snap 導入（ステップ10）より先なので、その時点では拡張機能インストールはスキップされる。bootstrap 完了後にもう一度 `home-manager switch` すれば入る。Cursor は bootstrap 対象外なので、本体を入れたあとの switch で冪等にリトライされる

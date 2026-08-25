@@ -1,49 +1,28 @@
-# 色設定
-PR_USER="%F{magenta}${USER}%f"
-PR_PATH="%F{magenta}"
-PR_RESET="%f"
-PR_DOLLAR="%F{green}\$%f"
+# Powerlevel10k instant prompt（zshrc内で最も早い段階に置くこと）
+# ここより前にコンソール出力するコードを置かないこと（キャッシュ・チェックサム系コマンド以外）
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
 
-setopt PROMPT_SUBST
+# Oh My Zsh 本体（bootstrap.shが ~/.oh-my-zsh へ導入する。あえてNix管理外）
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git)
 
-prompt_path() {
-  local cwd="$PWD"
+# 未導入環境でも壊れないようにガードする
+[[ -d $ZSH ]] && source "$ZSH/oh-my-zsh.sh"
 
-  # root の時: "/$"（間は開けない）
-  if [[ $EUID -eq 0 ]]; then
-    printf "%s /%s" "$PR_USER" "$PR_RESET"
-    return
-  fi
+# Oh My Zshが LESS=-R を設定してしまい、`git branch` 等の短い出力でも
+# 全画面のページャーが開いて終了時に消える挙動になるため上書きする。
+# -F: 1画面に収まる出力はページャーを開かずそのまま表示
+# -R: 色エスケープをそのまま通す
+# -X: ページャー終了時に画面を復元しない（出力が残る）
+export LESS='-FRX'
 
-  # ホーム: "~$"
-  if [[ "$cwd" == "$HOME" ]]; then
-    printf "%s %s~%s" "$PR_USER" "$PR_PATH" "$PR_RESET"
-    return
-  fi
+# Powerlevel10kの設定（zsh/.p10k.zsh をリポジトリで管理。macOS風の最小構成）
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 
-  # ホーム配下は常に ~/<最後のディレクトリ名>
-  if [[ "$cwd" = "$HOME"/* ]]; then
-    local rel="${cwd#$HOME/}"
-    local last="${rel##*/}"
-    printf "%s %s~/%s%s" "$PR_USER" "$PR_PATH" "$last" "$PR_RESET"
-    return
-  fi
-
-  # ルート直下（例: /opt → "/opt$"）
-  if [[ "$cwd" == /* && "$cwd" != */*/* ]]; then
-    printf "%s %s%s%s" "$PR_USER" "$PR_PATH" "$cwd" "$PR_RESET"
-    return
-  fi
-
-  # その他のフルパス
-  printf "%s %s%s%s" "$PR_USER" "$PR_PATH" "$cwd" "$PR_RESET"
-}
-
-# PROMPT（$ の前後スペース制御を正常化）
-PROMPT='$(prompt_path)$(
-  if [[ "$PWD" == "$HOME" ]] || [[ $EUID -eq 0 ]] || [[ "$PWD" == /* && "$PWD" != */*/* ]]; then
-    echo "'"$PR_DOLLAR"'"
-  else
-    echo " '"$PR_DOLLAR"'"
-  fi
-) '
+# direnv: .envrc のあるディレクトリで devShell を自動ON/OFF（nix/home.nix で導入）
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook zsh)"
+fi

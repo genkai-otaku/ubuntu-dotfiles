@@ -1,29 +1,40 @@
-# Ubuntu用のターミナル設定
+# zsh / ターミナル設定
 
-## 概要
-- ターミナルのファイルパスの表示仕様について
+Oh My Zsh + Powerlevel10k の設定実体。適用は [nix/home.nix](../nix/home.nix) が担い、`~/.zshrc` / `~/.bashrc` / `~/.p10k.zsh` へ書き込み可能なシンボリックリンクを張る。Oh My Zsh 本体とテーマはあえてNix管理外で、[bootstrap.sh](../bootstrap.sh) が `~/.oh-my-zsh` へ導入する。
 
-## パス表示ロジック
+## ファイル構成
 
-現在のディレクトリ位置やユーザー権限によって、プロンプトの表示形式（パスの短縮有無や `$` 前のスペース）が以下のように変化する。
+| ファイル | 役割 |
+|---|---|
+| [`.zshrc`](.zshrc) | Oh My Zsh の起動、`LESS=-FRX`、p10k の読み込み、direnv フック |
+| [`.p10k.zsh`](.p10k.zsh) | Powerlevel10k の見た目（macOS風の最小構成。手書き） |
+| [`.bashrc`](.bashrc) | 対話bashを即zshへ `exec` する引き継ぎ用 |
 
-| path | 表示例 |
-| :--- | :--- |
-| `/` | `/$` |
-| `/home/tonosaki` | `~$` |
-| `/home/tonosaki/Dev` | `~/Dev $` |
-| `/home/tonosaki/Dev/kaishi` | `~/kaishi $` |
+## プロンプト（Powerlevel10k）
 
-## 色
-- パス：`magenta`
-- $：`green`
-- プロンプト：`white`
+macOS標準ターミナルの `user@host dir %` に寄せた、左側のみ・1行・背景色なしのコンパクトな見た目。
 
-## 設定コマンド
-```zsh
-vim ~/.zshrc
-```
+| 要素 | 内容 |
+|---|---|
+| context | `user@host` を常時表示（無色） |
+| dir | カレントは最後の1階層のみ（ホームは `~`）。色は黒背景でも読める明るい青（256色の39） |
+| vcs | ブランチ名のみ。クリーンは緑、変更ありは黄、コンフリクトは赤。マーカー（`●` / `?`）は出さない |
+| prompt_char | macOSと同じ `%`（直前コマンド成功で緑・失敗で赤） |
+
+`p10k configure` は使わない（ウィザードが `~/.p10k.zsh` を実体ファイルで上書きする）。見た目を変えるときはリポジトリの `.p10k.zsh` を直接編集する。home-manager 側は `force = true` なので、上書きされても次回 switch でリンクに戻る。
+
+## direnv連携
+
+`.zshrc` の末尾で、`direnv` が入っていれば `direnv hook zsh` を評価する（未導入環境でもエラーにならないよう `command -v` でガード）。direnv本体（nix-direnv含む）は [`../nix/home.nix`](../nix/home.nix) の home-manager 設定で導入している。`~/.zshrc` は `mkOutOfStoreSymlink` 管理のため `enableZshIntegration` ではフックを注入できない。
+
+## bashからの引き継ぎ
+
+bashは使わない運用。ログインシェルがbashのままの環境（`chsh` 未実行）や `bash` を対話起動したときは `.bashrc` が zsh へ `exec` する。どうしてもbashが必要なときは `NO_ZSH=1 bash`。
+
+## 反映方法
+
 ```zsh
 source ~/.zshrc
 ```
 
+リンクは書き込み可能なので、このディレクトリを編集すれば新しいシェルから即反映される。home-manager switch はリンクを張り直すときだけ必要。

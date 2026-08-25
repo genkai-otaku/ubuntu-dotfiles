@@ -1,94 +1,72 @@
 // 既定値を上書きするには、このファイル内にキー バインドを挿入します
+// Vim風移動（Alt+H/J/K/L = 左/下/上/右）。エディタ／入力欄のみ。
+// textInputFocus は統合ターミナルの隠しtextareaでも真になるため、
+// !terminalFocus を付けて TUI へキーを渡す。
+// Linux のメニューニーモニック（Alt+H = ヘルプ等）は settings.json で無効化。
 [
     {
-        "key": "ctrl+h",
+        "key": "alt+h",
         "command": "cursorLeft",
-        "when": "textInputFocus"
+        "when": "textInputFocus && !terminalFocus"
     },
     {
-        "key": "ctrl+b",
-        "command": "-cursorLeft",
-        "when": "textInputFocus"
-    },
-    {
-        "key": "ctrl+b",
-        "command": "deleteLeft",
-        "when": "textInputFocus"
-    },
-    {
-        "key": "ctrl+h",
-        "command": "-deleteLeft",
-        "when": "textInputFocus"
-    },
-    {
-        "key": "ctrl+j",
+        "key": "alt+j",
         "command": "cursorDown",
-        "when": "textInputFocus"
+        "when": "textInputFocus && !terminalFocus"
     },
     {
-        "key": "ctrl+n",
-        "command": "-cursorDown",
-        "when": "textInputFocus"
-    },
-    {
-        "key": "ctrl+n",
-        "command": "editor.action.joinLines",
-        "when": "editorTextFocus && !editorReadonly"
-    },
-    {
-        "key": "ctrl+j",
-        "command": "-editor.action.joinLines",
-        "when": "editorTextFocus && !editorReadonly"
-    },
-    {
-        "key": "ctrl+k",
+        "key": "alt+k",
         "command": "cursorUp",
-        "when": "textInputFocus"
+        "when": "textInputFocus && !terminalFocus"
     },
-    {
-        "key": "ctrl+p",
-        "command": "-cursorUp",
-        "when": "textInputFocus"
-    },
-    {
-        "key": "ctrl+p",
-        "command": "deleteAllRight",
-        "when": "textInputFocus && !editorReadonly"
-    },
-    {
-        "key": "ctrl+k",
-        "command": "-deleteAllRight",
-        "when": "textInputFocus && !editorReadonly"
-    },
-    {
-        "key": "ctrl+l",
-        "command": "cursorRight",
-        "when": "textInputFocus"
-    },
-    {
-        "key": "ctrl+f",
-        "command": "-cursorRight",
-        "when": "textInputFocus"
-    },
-    {
-        "key": "ctrl+m",
-        "command": "notebook.centerActiveCell",
-        "when": "notebookEditorFocused"
-    },
-    {
-        "key": "ctrl+l",
-        "command": "-notebook.centerActiveCell",
-        "when": "notebookEditorFocused"
-    },
-    // macOS版の cmd+l に相当。LinuxではSuper+LがGNOMEの画面ロックと衝突するため alt+l にする
     {
         "key": "alt+l",
-        "command": "workbench.action.chat.newChat",
-        "when": "chatIsEnabled && inChat"
+        "command": "cursorRight",
+        "when": "textInputFocus && !terminalFocus"
     },
     {
-        "key": "ctrl+l",
-        "command": "-workbench.action.chat.newChat",
-        "when": "chatIsEnabled && inChat"
+        "key": "alt+shift+h",
+        "command": "cursorLeftSelect",
+        "when": "textInputFocus && !terminalFocus"
+    },
+    {
+        "key": "alt+shift+j",
+        "command": "cursorDownSelect",
+        "when": "textInputFocus && !terminalFocus"
+    },
+    {
+        "key": "alt+shift+k",
+        "command": "cursorUpSelect",
+        "when": "textInputFocus && !terminalFocus"
+    },
+    {
+        "key": "alt+shift+l",
+        "command": "cursorRightSelect",
+        "when": "textInputFocus && !terminalFocus"
+    },
+    // Linuxの統合ターミナル既定は Ctrl+Shift+C/V。他アプリと揃え Ctrl+C/V にする。
+    // Ctrl+C は選択中だけコピーし、未選択時はシェルへ渡して SIGINT を維持する。
+    // 選択中は Ctrl+C がコピーに取られるので、コマンドキャンセルは Ctrl+Shift+C で SIGINT を送る
+    {
+        "key": "ctrl+c",
+        "command": "workbench.action.terminal.copySelection",
+        "when": "terminalFocus && terminalTextSelected"
+    },
+    {
+        "key": "ctrl+v",
+        "command": "workbench.action.terminal.paste",
+        "when": "terminalFocus"
+    },
+    {
+        "key": "ctrl+shift+c",
+        "command": "-workbench.action.terminal.copySelection"
+    },
+    {
+        "key": "ctrl+shift+c",
+        "command": "workbench.action.terminal.sendSequence",
+        "args": {
+            "text": "\u0003"
+        },
+        "when": "terminalFocus"
     }
 ]

@@ -1,0 +1,16 @@
+[init]
+	defaultBranch = main
+[diff]
+	tool = vimdiff
+[difftool]
+	prompt = false
+[pager]
+	branch = false
+[credential "https://github.com"]
+	helper = !gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = !gh auth git-credential
+; user.name / user.email などの個人情報はリポジトリ（PUBLIC）に含めず、
+; 各PCで ~/.gitconfig.local（git管理外）に手動配置する。後勝ちのため末尾でinclude
+[include]
+	path = ~/.gitconfig.local

@@ -1,15 +1,17 @@
 # dotfiles
 
 ## 概要
-Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールに加え、ターミナル（zsh）のプロンプト設定、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、Claude Codeのグローバル設定（フック・スキル・permissionsなど）もあわせて管理する。`.claude/`配下は`.claude/setup.sh`で`~/.claude`へシンボリックリンクされ（`home-manager switch`時にactivationからも自動実行される）、このリポジトリを編集するだけで全プロジェクトのClaude Code設定に反映される。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。
+Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Codeのグローバル設定（フック・スキル・permissionsなど）、Grok CLI（xAI）の設定もあわせて管理する。`.claude/`配下は`.claude/setup.sh`で`~/.claude`へシンボリックリンクされ（`home-manager switch`時にactivationからも自動実行される）、このリポジトリを編集するだけで全プロジェクトのClaude Code設定に反映される。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLIは`bootstrap.sh`が導入する。
 
 ## 技術スタック
-- Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`）
-- Zsh（ターミナルプロンプト設定）
+- Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`。CLIツールとGNOMEデスクトップのdconf設定の両方を含む）
+- Zsh（Oh My Zsh + Powerlevel10k。プロンプト設定は`zsh/.p10k.zsh`。本体は`bootstrap.sh`が導入し、あえてNix管理外）
 - VSCode / Cursor（`vscode/`配下の共通設定をhome-manager経由で書き込み可能リンクし、拡張機能をactivation時に自動導入）
-- Bash（`bootstrap.sh`、`.claude/setup.sh`、`hooks/`配下のシェルスクリプト）
+- direnv / nix-direnv（`nix/home.nix`のhome-manager設定で導入。`.envrc`のあるプロジェクトディレクトリでflakeのdevShellを自動ON/OFF）
+- Bash（`bootstrap.sh`、`.claude/setup.sh`、`.claude/hooks/`配下のシェルスクリプト）
 - Claude Code（`settings.json` / `CLAUDE.md` / Skills / Hooksによるグローバル設定管理）
-- LINE Messaging API（`curl` + `jq`で通知連携）
+- Grok CLI（xAI。`grok/config.toml`と`grok/AGENTS.md`をhome-manager経由で書き込み可能リンク。本体は`bootstrap.sh`が公式インストーラーで導入）
+- Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Stop/Notification時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
 - GitHub Actions（`.github/workflows/`配下で共通ワークフローを管理し、他リポジトリへ配布）
 - GitHub CLI（`gh`、`/pr`スキル内でPR作成に使用）
 
@@ -19,11 +21,21 @@ dotfiles/
 ├── README.md
 ├── CLAUDE.md              # リポジトリのアーキテクチャ・運用ルール（Claude Code向け）
 ├── flake.nix              # Nix環境のエントリポイント（home-manager standalone）
+├── flake.lock             # パッケージバージョンの固定（`nix flake update`後は必ずコミット）
 ├── bootstrap.sh           # 新しいUbuntuマシンの1コマンドセットアップ
 ├── nix/
 │   ├── README.md          # Nix運用の詳細ドキュメント
-│   ├── packages.nix       # CLIツール（git・gh・Node.js等。Nixで管理）
-│   └── home.nix           # home-manager設定（zsh・VSCode/Cursor設定のリンクと拡張機能導入・.claude/のリンク処理）
+│   ├── packages.nix       # CLIツール（git・gh・vim・Node.js等。Nixで管理）
+│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ）
+│   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え）
+│   └── desktop.nix        # GNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等のdconf宣言）
+├── git/
+│   ├── README.md
+│   └── .gitconfig         # gitconfigの実体（home.nixが~/.gitconfigへ書き込み可能リンク。user.name/emailは~/.gitconfig.localに手動配置）
+├── grok/
+│   ├── README.md
+│   ├── config.toml        # Grok CLI（xAI）の設定実体（home.nixが~/.grok/config.tomlへ書き込み可能リンク）
+│   └── AGENTS.md          # Grokのグローバル指示（Grok固有の補足のみ。共通ルールはClaude互換で.claude/CLAUDE.mdが読まれる）
 ├── vscode/
 │   ├── README.md          # VSCode/Cursor共通設定の詳細ドキュメント
 │   ├── settings.json      # エディタ設定の実体（両エディタで共有）
@@ -37,15 +49,22 @@ dotfiles/
 │   └── workflows/
 │       └── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
 ├── zsh/
-│   ├── .zshrc            # プロンプト表示のカスタマイズ
+│   ├── .zshrc            # Oh My Zsh + Powerlevel10k の設定と direnv フック
+│   ├── .bashrc           # 対話bashを即zshへexecする引き継ぎ用
+│   ├── .p10k.zsh         # Powerlevel10kの見た目設定（macOS風の最小構成）
 │   └── README.md
+├── claude-notify/         # iPhoneプッシュ通知の送信スクリプト（.claude/hooks/notify.sh から呼ばれる）
+│   ├── README.md
+│   ├── send-push.mjs     # Web Push送信本体（VAPID署名。設定は ~/.claude/claude-notify.json）
+│   ├── package.json      # 依存は web-push のみ
+│   └── pnpm-lock.yaml    # node_modules は activation 時に自動導入（gitignore）
 └── .claude/
-    ├── CLAUDE.md          # 言語指定・Git操作制限などの共通指示
+    ├── CLAUDE.md          # 全プロジェクト向けグローバル指示（言語・Git制限・Nix運用・モデル方針）
     ├── settings.json      # フック・permissions・languageなどの設定
     ├── setup.sh           # .claude/ 配下を ~/.claude へシンボリックリンク
-    ├── .line-env.example  # LINEアクセストークン設定のテンプレート
+    ├── claude-notify.example.json # iPhoneプッシュ通知設定のテンプレート（~/.claude/claude-notify.json へコピー）
     ├── hooks/
-    │   ├── notify-line.sh # Stop/Notification時にLINEへ通知
+    │   ├── notify.sh      # Stop/Notification時にiPhoneへWeb Push通知
     │   └── pr-mode.sh     # /pr 実行中だけgit操作を自動許可
     ├── skills/
     │   ├── pr/SKILL.md            # /pr スキル
@@ -59,7 +78,7 @@ dotfiles/
 ```zsh
 curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/bootstrap.sh | bash
 ```
-`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用、ログインシェルのzshへの変更、Claude Code CLIの導入までを1コマンドで行う（冪等）。手動で必要な残作業（Docker Engineの導入、各アプリへのサインイン等）は[nix/README.md](/nix/README.md)を参照。
+`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code CLIの導入、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、最後にGrok CLIの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、各アプリへのサインイン等）は[nix/README.md](/nix/README.md)を参照。
 
 ### Nix環境の適用・更新（2回目以降）
 ```zsh
@@ -112,7 +131,10 @@ cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
 - `commands/private.md`：このリポジトリで使えるスキル・コマンドの個人用早見表
 
 ## 設定一覧
-- [zsh](/zsh/README.md)
-- [.claude](/.claude/README.md)
 - [Nix](/nix/README.md)
+- [zsh](/zsh/README.md)
 - [VSCode](/vscode/README.md)
+- [git](/git/README.md)
+- [Grok](/grok/README.md)
+- [Claude Code](/.claude/README.md)
+- [claude-notify](/claude-notify/README.md)

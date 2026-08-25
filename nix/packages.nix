@@ -7,6 +7,7 @@
     # バージョン管理
     git
     gh
+    vim # gitconfigの diff.tool = vimdiff に必要
 
     # JavaScript / Node.js
     nodejs_26
@@ -22,5 +23,10 @@
 
     # ユーティリティ
     jq
+
+    # フォント。Powerlevel10kのアイコン・区切り記号の描画に必要なNerd Font。
+    # Ubuntu標準ターミナルと同じ細い字幅を保つためUbuntuMonoのNerd Font版を使う
+    # （fontconfigへの反映は home.nix の fonts.fontconfig.enable が担う）
+    nerd-fonts.ubuntu-mono
   ];
 }

@@ -1,5 +1,5 @@
 {
-  description = "peipou's Ubuntu environment (home-manager standalone)";
+  description = "Ubuntu environment (home-manager standalone)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -40,6 +40,7 @@
           ./nix/home.nix
           ./nix/packages.nix
           ./nix/keyboard.nix
+          ./nix/desktop.nix
         ];
       };
     };
