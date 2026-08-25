@@ -10,14 +10,17 @@
 | path | 表示例 |
 | :--- | :--- |
 | `/` | `/$` |
-| `/home/tonosaki` | `~$` |
-| `/home/tonosaki/Dev` | `~/Dev $` |
-| `/home/tonosaki/Dev/kaishi` | `~/kaishi $` |
+| `/home/<ユーザー名>` | `~$` |
+| `/home/<ユーザー名>/Dev` | `~/Dev $` |
+| `/home/<ユーザー名>/Dev/kaishi` | `~/kaishi $` |
 
 ## 色
 - パス：`magenta`
 - $：`green`
 - プロンプト：`white`
+
+## direnv連携
+`.zshrc`の末尾で、`direnv`がインストールされていれば`direnv hook zsh`を評価し、`.envrc`のあるディレクトリでdevShellを自動ON/OFFする（未導入環境でもエラーにならないよう`command -v`でガード）。direnv本体（nix-direnv含む）は[`../nix/home.nix`](../nix/home.nix)のhome-manager設定で導入している。
 
 ## 設定コマンド
 ```zsh

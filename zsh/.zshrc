@@ -14,3 +14,8 @@ plugins=(git)
 
 # Powerlevel10kの設定（zsh/.p10k.zsh をリポジトリで管理。macOS風の最小構成）
 [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+
+# direnv: .envrc のあるディレクトリで devShell を自動ON/OFF（nix/home.nix で導入）
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook zsh)"
+fi

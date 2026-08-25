@@ -10,7 +10,7 @@ Nix（home-manager standalone）でUbuntu環境を宣言的に管理するため
 | [`../bootstrap.sh`](../bootstrap.sh) | 新しいUbuntuマシンの1コマンドセットアップ。`~/Dev/kaishi` の作成・クローン・ユーザー名の自動書き換え・初回適用までを行う |
 | [`../flake.nix`](../flake.nix) | エントリポイント。home-manager standaloneの `homeConfigurations."ubuntu"` を定義し、ホスト名に依存しない構成名 `ubuntu` を固定する。ユーザー名（`username`）はbootstrap.shがそのマシンに合わせて自動で書き換える |
 | [`packages.nix`](packages.nix) | CLIツール群（git・gh・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq等）。バージョンは `flake.lock` で固定される |
-| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` と VSCode/Cursor 設定（`../vscode/` の settings.json・keybindings.json）の書き込み可能リンク、拡張機能の自動インストール（`../vscode/install-extensions.sh`）、`.claude/` 配下のリンク処理（既存 `setup.sh` をactivation時に自動実行） |
+| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` と VSCode/Cursor 設定（`../vscode/` の settings.json・keybindings.json）の書き込み可能リンク、拡張機能の自動インストール（`../vscode/install-extensions.sh`）、direnv + nix-direnvの導入（`.envrc` のあるディレクトリでdevShellを自動ON/OFF）、`.claude/` 配下のリンク処理（既存 `setup.sh` をactivation時に自動実行） |
 | [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）。JIS配列・半角/全角キーでのIME切り替えという「Windowsの初期状態と同じ」挙動をdconfで宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
 
 ## 新しいUbuntuマシンのセットアップ手順
@@ -73,6 +73,7 @@ home-manager switch --flake .#ubuntu
 
 ## 注意
 
+- direnvは`home.nix`の`programs.direnv`（nix-direnv併用）で導入している。`.envrc`のあるプロジェクトディレクトリに`cd`すると、そのプロジェクトの`flake.nix`のdevShellが自動で有効化/無効化される。ただし`~/.zshrc`は`mkOutOfStoreSymlink`管理（home-manager非管理）のため`enableZshIntegration`ではzshフックが注入されず、フックは[`../zsh/.zshrc`](../zsh/.zshrc)に直接記述している
 - flakeは**gitに追跡されているファイルしか認識しない**。新しい `.nix` ファイルを追加したら `git add` してから適用すること
 - リポジトリの配置は `~/Dev/kaishi/ubuntu-dotfiles` 固定（`flake.nix` の `dotfilesPath` がユーザー名から自動で導かれる）。別の場所に置きたい場合は `dotfilesPath` と `bootstrap.sh` の両方を変更する
 - 構成名はホスト名に依存しない固定名 `ubuntu`。適用コマンドでは常に `#ubuntu` を明示する
