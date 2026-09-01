@@ -32,7 +32,7 @@ Codex は非管理フックを初回（および定義変更時）に信頼す�
 
 ## スキル
 
-`.claude/skills/`（`pr` / `readme` / `clean-branches`）を `~/.codex/skills/` へディレクトリリンクする。実体は Claude と共有なので、スキル本文は片方だけ編集する。Codex の明示起動は `$pr`（スラッシュの `/pr` でも UserPromptSubmit が検出する）。
+`.claude/skills/`（`pr` / `readme` / `clean-branches` / `nix-setup`）を `~/.codex/skills/` へディレクトリリンクする（追加したら `home-manager switch`）。実体は Claude と共有なので、スキル本文は片方だけ編集する。Codex の明示起動は `$` 接頭辞（`$pr` / `$readme` / `$clean-branches` / `$nix-setup`）。`/pr` はスラッシュでも UserPromptSubmit が検出する。
 
 ## VSCode 統合ターミナルの日本語IME
 

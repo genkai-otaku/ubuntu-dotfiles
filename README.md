@@ -67,7 +67,7 @@ dotfiles/
 │   ├── package.json      # 依存は web-push のみ
 │   └── pnpm-lock.yaml    # node_modules は activation 時に自動導入（gitignore）
 └── .claude/
-    ├── CLAUDE.md          # 全プロジェクト向けグローバル指示（言語・Git制限・Nix運用・モデル方針）
+    ├── CLAUDE.md          # 全プロジェクト向けグローバル指示（言語・Git制限・Nix運用・モデル方針）。新規devShellは nix-setup スキル
     ├── settings.json      # フック・permissions・languageなどの設定
     ├── setup.sh           # .claude/ 配下を ~/.claude へシンボリックリンク
     ├── claude-notify.example.json # iPhoneプッシュ通知設定のテンプレート（~/.claude/claude-notify.json へコピー）
@@ -77,7 +77,8 @@ dotfiles/
     ├── skills/
     │   ├── pr/SKILL.md            # /pr スキル
     │   ├── readme/SKILL.md        # /readme スキル
-    │   └── clean-branches/SKILL.md # /clean-branches スキル
+    │   ├── clean-branches/SKILL.md # /clean-branches スキル
+    │   └── nix-setup/SKILL.md     # /nix-setup スキル
     └── README.md
 ```
 
@@ -122,6 +123,7 @@ nix flake update
 - `/pr`：ユーザーが `/pr` と打ったときだけ、変更をコミットしブランチをpushしてGitHubへPull Requestを作成する（「PRを出して」では起動しない）
 - `/readme`：READMEをコードベースの現状に合わせて更新（なければ新規作成）する
 - `/clean-branches`：ローカルブランチのうちmain・develop以外を削除して整理する
+- `/nix-setup`：新規プロジェクトの開発環境をNixのdevShell + direnvでセットアップする
 
 ### セットアップスクリプト
 - `bash .claude/setup.sh`：`.claude/`配下を`~/.claude`へシンボリックリンク

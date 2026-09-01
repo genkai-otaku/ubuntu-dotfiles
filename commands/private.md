@@ -9,11 +9,12 @@
 /pr
 /readme
 /clean-branches
+/nix-setup
 ```
 
 ## Codex
 
-設定実体は `codex/`。スキルは `.claude/skills/` を共有（`$pr` / `$readme` / `$clean-branches`）。導入後に CLI で `/hooks` を開き、dotfiles 由来のフックを trust する。
+設定実体は `codex/`。スキルは `.claude/skills/` を共有（`$pr` / `$readme` / `$clean-branches` / `$nix-setup`）。導入後に CLI で `/hooks` を開き、dotfiles 由来のフックを trust する。
 
 ## Github Workflow
 
