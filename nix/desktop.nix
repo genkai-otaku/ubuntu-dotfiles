@@ -48,10 +48,17 @@
       night-light-temperature = lib.hm.gvariant.mkUint32 4700;
     };
 
-    # マウス（ナチュラルスクロールなし、速度は手動調整済みの値）
+    # マウス。speed の範囲は -1.0〜1.0。以前の -0.51 は libinput が
+    # 全体を減速し、画面横断に大きな腕の移動が要った。
+    # macOS 標準に近づける：adaptive（遅い動きは精密、速いフリックは
+    # 加速して画面を跨ぐ。macOS の Pointer acceleration と同じ思想）。
+    # speed は -0.3。0 より下げて通常速度もフリック最高速も少し遅くする。
+    # -0.51 までは戻さない。
+    # flat にすると加速がなくなり、また大きな移動が必要になる
     "org/gnome/desktop/peripherals/mouse" = {
       natural-scroll = false;
-      speed = -0.51315789473684204;
+      accel-profile = "adaptive";
+      speed = -0.3;
     };
 
     # タッチパッドは二本指スクロールを使う
