@@ -20,6 +20,7 @@
 # - stdin は camelCase、イベント名は GROK_HOOK_EVENT（小文字）
 # - UserPromptSubmit: 先頭が /pr、またはスキル本文の番兵 <!-- pr-mode-enable --> で
 #   フラグ作成。それ以外の非空 prompt ではフラグ削除
+# - 「PRを出して」等の自然言語ではフラグを立てない
 # - PreToolUse: フラグが無ければ対象コマンドを deny（always-approve でも止まる）
 # - Stop: フラグ削除
 #
@@ -144,6 +145,12 @@ if [ "$is_guarded_git" -eq 0 ]; then
   esac
 fi
 
+# フラグはフックだけが作る。エージェントが touch / リダイレクトで迂回するのを止める
+is_flag_tamper=0
+case "$tool_cmd" in
+  *claude-pr-mode-*) is_flag_tamper=1 ;;
+esac
+
 is_force_push=0
 if [ "$sub" = "push" ] || case "$tool_cmd" in *"git push"*) true ;; *) false ;; esac; then
   case "$tool_cmd" in
@@ -167,13 +174,16 @@ fi
 
 deny_reason='/pr の指示があるまで git commit / git push / gh pr create / gh pr merge は禁止されています'
 force_reason='force push は禁止されています'
+flag_reason='pr-mode フラグはフック以外が作成・変更してはならない'
 if [ -n "${GROK_HOOK_EVENT:-}" ]; then
   deny_msg=$(printf '{"decision":"deny","reason":"%s"}' "$deny_reason")
   deny_force=$(printf '{"decision":"deny","reason":"%s"}' "$force_reason")
+  deny_flag=$(printf '{"decision":"deny","reason":"%s"}' "$flag_reason")
 else
   # Claude / Codex
   deny_msg=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$deny_reason")
   deny_force=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$force_reason")
+  deny_flag=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$flag_reason")
 fi
 
 case "$event" in
@@ -211,8 +221,10 @@ case "$event" in
     fi
     ;;
   PreToolUse)
-    # force push は三実装ともここで止める（Claude の ask 許可でも通さない）
-    if [ "$is_force_push" -eq 1 ]; then
+    if [ "$is_flag_tamper" -eq 1 ]; then
+      echo "$deny_flag"
+    elif [ "$is_force_push" -eq 1 ]; then
+      # force push は三実装ともここで止める（Claude の ask 許可でも通さない）
       echo "$deny_force"
     elif [ -n "${GROK_HOOK_EVENT:-}" ] || [ -n "${CODEX_HOOK:-}" ]; then
       # git commit / push / PR 作成の deny は Grok / Codex。
