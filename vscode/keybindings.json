@@ -68,5 +68,16 @@
             "text": "\u0003"
         },
         "when": "terminalFocus"
+    },
+    // Grok / Claude Code の TUI は Enter が送信、Shift+Enter が改行。
+    // 統合ターミナル既定はどちらも CR だけなので、Shift+Enter を
+    // ESC+CR に差し替え、TUI 側の改行として届ける
+    {
+        "key": "shift+enter",
+        "command": "workbench.action.terminal.sendSequence",
+        "args": {
+            "text": "\u001b\r"
+        },
+        "when": "terminalFocus"
     }
 ]
