@@ -26,5 +26,10 @@
     // 反映には VS Code / Cursor の再起動が必要。
     "window.titleBarStyle": "native",
     "window.menuStyle": "custom",
-    "window.menuBarVisibility": "compact"
+    "window.menuBarVisibility": "compact",
+    // 統合ターミナルのホイールを既定（1）より速くする
+    "terminal.integrated.mouseWheelScrollSensitivity": 3,
+    // AMD + Wayland で統合ターミナルの描画が欠ける／ちらつくため GPU
+    // アクセラレーションを切る。auto に戻すと再発しうる
+    "terminal.integrated.gpuAcceleration": "off"
 }

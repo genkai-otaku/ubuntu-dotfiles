@@ -27,7 +27,7 @@ dotfiles/
 │   ├── README.md          # Nix運用の詳細ドキュメント
 │   ├── packages.nix       # CLIツール（git・gh・vim・Node.js等。Nixで管理）
 │   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ）
-│   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え・TUI向け embed-preedit-text=false）
+│   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え・キーリピート delay=250ms・TUI向け embed-preedit-text=false）
 │   └── desktop.nix        # GNOMEデスクトップ設定（テーマ・電源・キーバインド・Dock・ウィンドウボタン左上。VSCode側は vscode/）
 ├── git/
 │   ├── README.md
