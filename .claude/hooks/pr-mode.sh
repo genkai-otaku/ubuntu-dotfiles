@@ -145,11 +145,14 @@ if [ "$is_guarded_git" -eq 0 ]; then
   esac
 fi
 
-# フラグはフックだけが作る。エージェントが touch / リダイレクトで迂回するのを止める
+# フラグはフックだけが作る。エージェントが touch / リダイレクトで迂回するのを止める。
+# git commit / gh pr create の本文にフラグ名が出るだけでは deny しない
 is_flag_tamper=0
-case "$tool_cmd" in
-  *claude-pr-mode-*) is_flag_tamper=1 ;;
-esac
+if [ "$is_guarded_git" -eq 0 ]; then
+  case "$tool_cmd" in
+    *claude-pr-mode-*) is_flag_tamper=1 ;;
+  esac
+fi
 
 is_force_push=0
 if [ "$sub" = "push" ] || case "$tool_cmd" in *"git push"*) true ;; *) false ;; esac; then
