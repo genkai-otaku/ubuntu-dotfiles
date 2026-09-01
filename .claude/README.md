@@ -39,7 +39,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ## settings.json
 
 - `hooks.Stop` / `hooks.Notification`：`hooks/notify.sh` を実行して iPhone へプッシュ通知
-- `hooks.UserPromptExpansion` / `UserPromptSubmit` / `PermissionRequest`：`hooks/pr-mode.sh`（`/pr` フロー）
+- `hooks.UserPromptExpansion` / `UserPromptSubmit` / `PermissionRequest` / `PreToolUse`：`hooks/pr-mode.sh`（`/pr` フロー。PreToolUse は Grok の deny 用）
 - `permissions.ask`：`git commit` / `git push` / `gh pr create` / `gh pr merge` は実行前に必ず確認ダイアログを表示
 - `language`：`japanese`
 - `effortLevel`：`high`
@@ -54,10 +54,12 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 
 - `CLAUDE.md`：`/pr` の指示があるまで `git commit` / `git push` / `gh pr create` を実行しないよう指示（Claude が試みること自体を抑止）
 - `settings.json` の `permissions.ask`：万一実行しようとしても必ず確認ダイアログが出る強制レイヤー
-- `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを自動許可（確認ダイアログをスキップ）
-  - `UserPromptExpansion`：スラッシュコマンド展開時、コマンド名が `pr` ならフラグ作成、別コマンドなら削除
-  - `UserPromptSubmit`：中断などで残った古いフラグを掃除
-  - `PermissionRequest`（Bash）：フラグがあれば `behavior: allow` を返して ask ダイアログを代替承認
+- `skills/pr`：`disable-model-invocation: true`。自然言語では起動せず、ユーザーが `/pr` と打ったときだけ動く
+- `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを許可する。force push は `/pr` 中でも許可しない
+  - `UserPromptExpansion`（Claude）：スラッシュコマンド展開時、コマンド名が `pr` ならフラグ作成、別コマンドなら削除
+  - `UserPromptSubmit`：Claude は残骸フラグを掃除。Grok は先頭 `/pr` または番兵 `<!-- pr-mode-enable -->` でフラグ作成、それ以外の非空 prompt で削除
+  - `PermissionRequest`（Bash、Claude）：フラグがあれば `behavior: allow` を返して ask ダイアログを代替承認
+  - `PreToolUse`（Bash、Grok）：フラグが無ければ git commit / push / PR作成を deny（always-approve でも止まる）
   - `Stop`：ターン終了時にフラグ削除
 
 ## iPhone プッシュ通知（claude-notify）

@@ -10,7 +10,7 @@ Ubuntu用の個人dotfilesリポジトリ。ビルド・lint・テストは存�
 - `vscode/` — **VSCode / Cursor 共通の設定実体**（settings.json・keybindings.json・拡張機能リスト・Linux IME 用起動ラッパー `code`）。`home.nix` が両エディタのUserディレクトリ（`~/.config/{Code,Cursor}/User/`）へ書き込み可能リンクを張り、`install-extensions.sh` が activation 時に拡張機能を導入する。エディタ本体はNix管理外（apt/snap等で手動導入）のため `programs.vscode` モジュールは使わない。ウィンドウボタンの左上一段は GNOME の dconf では効かないので `settings.json` の `window.titleBarStyle` / `menuStyle` / `menuBarVisibility` をセットで持つ（詳細は `vscode/README.md`）。この3つは欠けると右上に戻るか二段メニューになるので、片方だけ変えないこと。統合ターミナルで grok / Claude Code の日本語が崩れる問題の本体対策は `keyboard.nix`（`vscode/README.md` の「統合ターミナルの日本語IME」）
 - `.claude/` — Claude Codeの**グローバル設定の実体**（settings.json・CLAUDE.md・hooks・skills）
 - `git/` — **gitconfigの実体**（`.gitconfig`）。`home.nix` が `~/.zshrc` と同じ `mkOutOfStoreSymlink` 方式で `~/.gitconfig` へ書き込み可能リンクを張る（既存の実体ファイルを置き換えるため `force = true`）。credential helperはユーザー名非依存のPATH上の `gh` を使う形に正規化してある。**user.name / user.email はリポジトリ（PUBLIC）に含めない**。各PCで `~/.gitconfig.local`（git管理外）に手動配置し、`.gitconfig` 末尾の include で読み込む。gh の `co: pr checkout` エイリアスは `~/.config/gh/config.yml` をgh自身が書き換えるためファイルリンクにはせず、`home.nix` の `home.activation` で `gh alias set` を冪等に実行する
-- `grok/` — **Grok CLI（xAI）の設定実体**（`config.toml` と `AGENTS.md`）。`home.nix` が `mkOutOfStoreSymlink` で `~/.grok/config.toml`・`~/.grok/AGENTS.md` へ書き込み可能リンクを張る。`AGENTS.md` には**Grok固有の補足のみ**（CLAUDE.mdのモデル運用ポリシーのGrok向け読み替え：`spawn_subagent` / explore・plan・general-purpose の使い分け等）を書く。言語・Git制限・Nix運用などの共通ルールはGrokがClaude互換モード（デフォルト有効）で `~/.claude/CLAUDE.md` から読み込むため、AGENTS.mdに**重複させないこと**。`config.toml` の `permission_mode = "always-approve"` により、Claude側の `permissions.ask` / `pr-mode.sh`（確認ダイアログ層）はGrokでは効かない。git操作の抑止は指示ファイルに依存する。`auth.json` 等の秘密情報・キャッシュ・セッションは `~/.grok` 直下の実体のまま管理対象外。本体は `claude-code` 同様あえてNix管理外で `bootstrap.sh` が公式インストーラーで導入する
+- `grok/` — **Grok CLI（xAI）の設定実体**（`config.toml` と `AGENTS.md`）。`home.nix` が `mkOutOfStoreSymlink` で `~/.grok/config.toml`・`~/.grok/AGENTS.md` へ書き込み可能リンクを張る。`AGENTS.md` には**Grok固有の補足のみ**（CLAUDE.mdのモデル運用ポリシーのGrok向け読み替え：`spawn_subagent` / explore・plan・general-purpose の使い分け等）を書く。言語・Git制限・Nix運用などの共通ルールはGrokがClaude互換モード（デフォルト有効）で `~/.claude/CLAUDE.md` から読み込むため、AGENTS.mdに**重複させないこと**。`config.toml` の `permission_mode = "always-approve"` により確認ダイアログは出ない。代わりに `pr-mode.sh` の `PreToolUse` が `/pr` 中以外の git commit / push / PR作成を deny する（Grok に無い `UserPromptExpansion` / `PermissionRequest` の代替）。`auth.json` 等の秘密情報・キャッシュ・セッションは `~/.grok` 直下の実体のまま管理対象外。本体は `claude-code` 同様あえてNix管理外で `bootstrap.sh` が公式インストーラーで導入する
 - `zsh/` — zsh設定（`zsh/.zshrc`）。Oh My Zsh + Powerlevel10k テーマを使用し、本体は `bootstrap.sh` が `~/.oh-my-zsh` へ導入（あえてNix管理外）。direnv フックもここへ直書きする。`zsh/.bashrc` は対話bashを即zshへexecする引き継ぎ用（bashは使わない運用。`NO_ZSH=1 bash` で回避可）
 - `claude-notify/` — iPhoneへのWeb Push通知の**送信側スクリプト**（`send-push.mjs`）。詳細は後述の「iPhoneプッシュ通知の仕組み」参照
 - `.github/workflows/` — **他リポジトリへコピーして使う配布用テンプレート**。ただしリポジトリ内に置かれている以上、`delete-merged-branch.yml`（PRマージ時のブランチ自動削除）は**このリポジトリ自身のPRにも発火する**
@@ -76,9 +76,12 @@ git commit / git push / PR作成の制御は三層で成り立っており、**�
 
 `pr-mode.sh` には実装上の制約がコメントで明記されている。変更時は以下に注意：
 
-- `/pr` かどうかの判定は `UserPromptExpansion` の `command_name` でのみ可能（`UserPromptSubmit` のpromptには展開後の本文しか入らず判定できない）
-- 自動承認は `PermissionRequest` フックで返す（`PreToolUse` の `permissionDecision=allow` では `permissions.ask` を上書きできないため）
-- フラグファイルは `${TMPDIR:-/tmp}/claude-pr-mode-<session_id>`。`Stop` で削除し、15秒より古い残骸は `UserPromptSubmit` で掃除する
+- Claude での `/pr` 判定は `UserPromptExpansion` の `command_name` が正（`UserPromptSubmit` のpromptは展開後の本文）
+- Claude の自動承認は `PermissionRequest` フックで返す（`PreToolUse` の `permissionDecision=allow` では `permissions.ask` を上書きできないため）
+- Grok は `UserPromptExpansion` / `PermissionRequest` が無い。`UserPromptSubmit` で `/pr` を検出し（先頭 `/pr`、またはスキル本文の `<!-- pr-mode-enable -->`）、`PreToolUse` でフラグ無しの対象コマンドを deny する。stdin は camelCase、イベント名は `GROK_HOOK_EVENT`
+- フラグファイルは `${TMPDIR:-/tmp}/claude-pr-mode-<session_id>`。`Stop` で削除。Claude は15秒より古い残骸を `UserPromptSubmit` で掃除し、Grok は `/pr` でない非空 prompt で即削除する
+- `/pr` スキルは `disable-model-invocation: true`（自然言語では起動しない）。force push はフラグがあっても許可しない
+- `git -C` / `git -c` 越しの commit/push も対象。`git stash push` は対象外
 
 ## iPhoneプッシュ通知の仕組み（claude-notify）
 

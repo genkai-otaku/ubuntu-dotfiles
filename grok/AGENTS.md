@@ -1,25 +1,39 @@
-# Grok CLI 向けグローバル指示
+# Grok 固有の補足
 
-言語（常に日本語）・Git操作の制限（/pr 相当の運用）・パッケージインストールの制限（Nix運用）などの共通ルールは、Claude互換モード（デフォルト有効）で自動的に読み込まれる `~/.claude/CLAUDE.md` に従うこと。このファイルには**Grok固有の補足だけ**を書き、共通ルールは重複させない。
+共通ルール（日本語、Git、Nix、パッケージ）は `~/.claude/CLAUDE.md` に従う。
+ここには Grok だけの差分だけ書く。
 
-# モデル運用ポリシーの Grok への読み替え
+`~/.claude/CLAUDE.md` の「モデル運用ポリシー」は Claude Code 専用（Fable 5 / Sonnet / Opus、`model: "sonnet"` 等）。Grok ではこのファイルに従い、Claude のモデル名は指定しない。
 
-`~/.claude/CLAUDE.md` の「モデル運用ポリシー（オーケストレーター / 実装の分離）」は Claude Code 向けの記述（Fable 5 / Sonnet / Opus、Agent ツールの `model:` 指定）。Grok では同じ方針を以下のとおり実現する。
+## 役割
 
-## 役割分担
+- メイン: 分解、委譲、監査、最終判断
+- 調査: `spawn_subagent` / `subagent_type: explore`（編集しない）
+- 計画: `plan`（編集しない。Critical Files を列挙して返せ）
+- 実装: `general-purpose`
+- ツール名は一覧の `spawn_subagent`（環境によっては `task`）
+- 自明で局所的な修正、設計と実装が不可分な高難度はメインがやってよい
+- 独立した調査・実装・検証が複数あるときだけ委譲する
 
-- **メインセッション**: 要件整理、設計、タスク分解、サブエージェントへの指示、成果物の監査・レビュー、最終判断に専念する
-- **サブエージェント**: 実装・調査は `spawn_subagent` ツールで子セッションに委譲する（環境によってはツール名が `task` の場合がある。実際の名前はツール一覧で確認）
-  - 調査・探索 → `subagent_type: explore`（読み取り専用。プロンプトで徹底度 quick / medium / very thorough を必ず明示する）
-  - 実装計画の立案 → `subagent_type: plan`（読み取り専用で Critical Files 付きの計画を返す）
-  - 実装作業 → `subagent_type: general-purpose`
-- **例外**: 実装難易度が特に高い箇所（繊細な設計判断と実装が不可分な場合など）は、メインセッションが直接実装してよい
+## 起動ルール
 
-## Grok 固有の制約と運用ルール
+- 子はトップレベルからのみ。ネスト禁止
+- 独立タスクは `background: true` で並列。回収は `get_command_or_subagent_output`。監視は `Ctrl+G`
+- 依存する作業は待ってから次を立てる（`background: false`）。段階継続は `resume_from`（完了済み・同一タイプのみ）
+- 調査・計画: `isolation: none`
+- ファイルを書く実装が並列: `isolation: worktree`。所有ディレクトリを分け、同じファイルを2体に触らせない。終わったら親が取り込む
+- 子への prompt は自己完結: 対象パス、やってはいけないこと、完了条件（実行するテストコマンド）、返す形式
+- 調査の深さは prompt に `quick` / `medium` / `very thorough` で書く（explore 定義がこの3語を見る。ツール引数ではない）
+- 成果物はメインがレビューしてから完了
 
-- **モデルは呼び出し時に指定できない**（Claude Code の `model: "sonnet"` に相当するパラメータは `spawn_subagent` に無い）。エージェントタイプ単位で事前に紐付ける：`~/.grok/config.toml` の `[subagents.models].<subagent_type>`、またはエージェント定義（`~/.grok/agents/*.md`）の frontmatter `model:`。どちらも未設定ならサブエージェントは親セッションのモデルを継承する
-- 軽量モデルが利用できる場合（`grok models` で確認）は、explore など機械的なタスクを `[subagents.models]` で軽量モデルへルーティングし、トークンを節約する（ドキュメント上の例: `explore = "grok-build"`）
-- **サブエージェントのネストは不可**（サブエージェントを起動できるのはトップレベルのセッションのみ。深さ1階層まで）。サブエージェントがさらに委譲する前提のタスク分割はしない
-- 独立したタスクは `background: true` を付けて複数並列に起動する（結果は `get_command_or_subagent_output` で回収。実行状況は Tasks ペイン `Ctrl+G` で確認できる）
-- サブエージェントへの指示は自己完結させる（対象ファイル、設計方針、制約、完了条件を明記）
-- サブエージェントの成果物はメインセッションが必ずレビューしてから完了とする
+## モデル
+
+- 呼び出し時の `model` はユーザーが明示したときだけ付ける。未指定なら親を継承する
+- タイプ単位の既定は `~/.grok/config.toml` の `[subagents.models].<type>`、または `~/.grok/agents/*.md` の frontmatter `model:`
+- 使える ID は `grok models` で確認する。explore は `config.toml` の `[subagents.models]` で `grok-4.5` へ振ってある
+- `sonnet` / `opus` / `haiku` / `fable` は指定しない
+
+## /pr
+
+- git commit / push / PR 作成は `/pr` 指示があるまで禁止（CLAUDE.md と同じ）
+- Grok では確認は出ない。`pr-mode.sh` が `/pr` 中だけ通し、それ以外は PreToolUse で deny する。`/pr` 中はコマンドをそのまま実行する

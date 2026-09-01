@@ -40,6 +40,17 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/pr-mode.sh"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "",

@@ -29,18 +29,18 @@ if [ -z "$input" ]; then
   exit 0
 fi
 
-event="$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)"
-cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+event="$(printf '%s' "$input" | jq -r '.hook_event_name // .hookEventName // empty' 2>/dev/null)"
+cwd="$(printf '%s' "$input" | jq -r '.cwd // .workspaceRoot // empty' 2>/dev/null)"
 message="$(printf '%s' "$input" | jq -r '.message // empty' 2>/dev/null)"
 
-# Grok CLI からの呼び出し（Claude 形式の hook_event_name が無く、GROK_HOOK_EVENT がある）
+# Grok CLI からの呼び出し。判定は GROK_HOOK_EVENT（stdin のキー有無に依存しない）
 source_label=""
-if [ -z "$event" ] && [ -n "${GROK_HOOK_EVENT:-}" ]; then
+if [ -n "${GROK_HOOK_EVENT:-}" ]; then
   source_label=" (Grok)"
   case "$GROK_HOOK_EVENT" in
     stop) event="Stop" ;;
     notification) event="Notification" ;;
-    *) event="$GROK_HOOK_EVENT" ;;
+    *) [ -n "$event" ] || event="$GROK_HOOK_EVENT" ;;
   esac
 
   # Grok の Stop は応答完了以外（セッション終了時など）にも発火するため、

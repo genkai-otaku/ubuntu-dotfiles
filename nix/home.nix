@@ -109,7 +109,8 @@ in
     };
     # Grok CLI の設定。grok 自身もこのファイルへ書き込むため、書き込み可能
     # リンクにして変更をリポジトリ側へ取り込む（VSCode設定と同じ方式）。
-    # force = true は既存実体ファイルの置き換え用
+    # force = true は既存実体ファイルの置き換え用。Grok がリンクを実体で
+    # 置き換えた場合は、下の captureGrokConfigWrites が switch 直前に取り込む
     ".grok/config.toml" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/config.toml";
       force = true;
@@ -137,6 +138,19 @@ in
   # （新規環境に入らなくなるだけ）
   home.activation.installEditorExtensions = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     run /bin/bash ${dotfilesPath}/vscode/install-extensions.sh
+  '';
+
+  # Grok が ~/.grok/config.toml のシンボリックリンクを実体ファイルで置き換えた
+  # 場合、home.file の force=true がリンクに戻す前に実体側をリポジトリへ取り込む
+  home.activation.captureGrokConfigWrites = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
+    dest="$HOME/.grok/config.toml"
+    src="${dotfilesPath}/grok/config.toml"
+    if [ -f "$dest" ] && [ ! -L "$dest" ] && [ -f "$src" ] && [ "$dest" -nt "$src" ]; then
+      if ! cmp -s "$src" "$dest"; then
+        run cp "$dest" "$src"
+        echo "Grok config.toml の実体変更をリポジトリへ取り込みました"
+      fi
+    fi
   '';
 
   # ~/.claude 配下のリンクは既存の setup.sh に委譲する。

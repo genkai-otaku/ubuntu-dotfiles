@@ -1,39 +1,184 @@
 #!/bin/bash
 
-# /pr モード管理フック
-# ユーザーが /pr を実行しているターンの間だけ、git commit / git push /
-# gh pr create / gh pr merge の確認ダイアログ（permissions.ask）を
-# スキップして自動許可する。
+# /pr モード管理フック（Claude Code / Grok CLI 両対応）
 #
-# - UserPromptExpansion: スラッシュコマンド展開時に発火。command_name が
-#   "pr" ならフラグ作成、別のコマンドなら削除
-#   （UserPromptSubmit の prompt には展開後のスキル本文が入るため、
-#     "/pr" の判定はこのイベントの command_name で行う必要がある）
+# /pr 実行中だけ git commit / git push / gh pr create / gh pr merge を許可する。
+# force push（--force / -f / --force-with-lease）は /pr 中でも許可しない。
+#
+# Claude Code:
+# - UserPromptExpansion: command_name が pr ならフラグ作成、別コマンドなら削除
+#   （UserPromptSubmit の prompt は展開後のスキル本文なので、スラッシュコマンド名の
+#     判定は Expansion の command_name が正）
 # - UserPromptSubmit: 前ターンの残骸フラグを掃除（立てた直後のものは残す）
-# - PermissionRequest: フラグがあれば対象コマンドを behavior=allow で自動承認
-#   （PreToolUse の permissionDecision=allow では permissions.ask を
-#     上書きできない。ask ダイアログの代替はこのイベントで行う）
+# - PermissionRequest: フラグがあれば behavior=allow で ask ダイアログを代替承認
+#   （PreToolUse の permissionDecision=allow では permissions.ask を上書きできない）
 # - Stop: ターン終了時にフラグ削除
+#
+# Grok:
+# - UserPromptExpansion / PermissionRequest は存在しない（スキップされる）
+# - stdin は camelCase、イベント名は GROK_HOOK_EVENT（小文字）
+# - UserPromptSubmit: 先頭が /pr、またはスキル本文の番兵 <!-- pr-mode-enable --> で
+#   フラグ作成。それ以外の非空 prompt ではフラグ削除
+# - PreToolUse: フラグが無ければ対象コマンドを deny（always-approve でも止まる）
+# - Stop: フラグ削除
+#
+# フラグ: ${TMPDIR:-/tmp}/claude-pr-mode-<session_id>
+
+if ! command -v jq >/dev/null 2>&1; then
+  exit 0
+fi
 
 input=$(cat)
-event=$(echo "$input" | jq -r '.hook_event_name // ""')
-session=$(echo "$input" | jq -r '.session_id // "unknown"')
+event=$(printf '%s' "$input" | jq -r '.hook_event_name // .hookEventName // empty')
+if [ -z "$event" ] && [ -n "${GROK_HOOK_EVENT:-}" ]; then
+  event="$GROK_HOOK_EVENT"
+fi
+case "$event" in
+  user_prompt_expansion) event=UserPromptExpansion ;;
+  user_prompt_submit) event=UserPromptSubmit ;;
+  permission_request) event=PermissionRequest ;;
+  pre_tool_use) event=PreToolUse ;;
+  stop) event=Stop ;;
+esac
+
+session="${GROK_SESSION_ID:-}"
+if [ -z "$session" ]; then
+  session=$(printf '%s' "$input" | jq -r '.session_id // .sessionId // "unknown"')
+fi
 flag="${TMPDIR:-/tmp}/claude-pr-mode-${session}"
+
+cmd_name=$(printf '%s' "$input" | jq -r '.command_name // .commandName // empty')
+prompt=$(printf '%s' "$input" | jq -r '.prompt // .user_prompt // .userPrompt // empty')
+tool_cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // .toolInput.command // empty')
+subagent=$(printf '%s' "$input" | jq -r '.subagentType // .subagent_type // empty')
+
+is_pr=0
+if [ "$cmd_name" = "pr" ]; then
+  is_pr=1
+else
+  case "$prompt" in
+    *'<!-- pr-mode-enable -->'*) is_pr=1 ;;
+  esac
+  if [ "$is_pr" -eq 0 ]; then
+    first=$(printf '%s\n' "$prompt" | sed -n '1p' | tr -d '\r')
+    first="${first#"${first%%[![:space:]]*}"}"
+    case "$first" in
+      /pr|/pr[[:space:]]*) is_pr=1 ;;
+    esac
+  fi
+fi
+
+# git/gh のサブコマンドを、先頭の env 代入と git/gh グローバルオプションを剥がして取る。
+# `git stash push` を push 扱いしない。引用符は無視して空白分割する（十分）。
+git_or_gh_sub() {
+  local -a w
+  local i=0 bin sub
+  read -r -a w <<< "$1"
+  while [ "$i" -lt "${#w[@]}" ]; do
+    case "${w[$i]}" in
+      *=*) i=$((i + 1)) ;;
+      *) break ;;
+    esac
+  done
+  bin="${w[$i]:-}"
+  bin="${bin##*/}"
+  i=$((i + 1))
+  case "$bin" in
+    git)
+      while [ "$i" -lt "${#w[@]}" ]; do
+        case "${w[$i]}" in
+          -c|-C|--git-dir|--work-tree|--namespace|--super-prefix|--config-env)
+            i=$((i + 2)) ;;
+          --git-dir=*|--work-tree=*|--namespace=*|--super-prefix=*|--config-env=*)
+            i=$((i + 1)) ;;
+          -*)
+            i=$((i + 1)) ;;
+          *)
+            break ;;
+        esac
+      done
+      printf '%s' "${w[$i]:-}"
+      ;;
+    gh)
+      while [ "$i" -lt "${#w[@]}" ]; do
+        case "${w[$i]}" in
+          --repo|-R|--hostname)
+            i=$((i + 2)) ;;
+          --repo=*|--hostname=*)
+            i=$((i + 1)) ;;
+          -*)
+            i=$((i + 1)) ;;
+          *)
+            break ;;
+        esac
+      done
+      if [ "${w[$i]:-}" = "pr" ]; then
+        printf 'pr %s' "${w[$((i + 1))]:-}"
+      else
+        printf '%s' "${w[$i]:-}"
+      fi
+      ;;
+  esac
+}
+
+is_guarded_git=0
+sub=$(git_or_gh_sub "$tool_cmd")
+case "$sub" in
+  commit|push|"pr create"|"pr merge") is_guarded_git=1 ;;
+esac
+# bash -c 'git commit ...' など、ラッパー越しは部分一致に倒す
+if [ "$is_guarded_git" -eq 0 ]; then
+  case "$tool_cmd" in
+    *"git commit"*|*"git push"*|*"gh pr create"*|*"gh pr merge"*) is_guarded_git=1 ;;
+  esac
+fi
+
+is_force_push=0
+if [ "$sub" = "push" ] || case "$tool_cmd" in *"git push"*) true ;; *) false ;; esac; then
+  case "$tool_cmd" in
+    *" --force"*|*" --force-with-lease"*) is_force_push=1 ;;
+  esac
+  if [ "$is_force_push" -eq 0 ]; then
+    saw_push=0
+    for t in $tool_cmd; do
+      [ "$t" = "push" ] && saw_push=1
+      if [ "$saw_push" -eq 1 ]; then
+        case "$t" in
+          -f|--force|--force-with-lease|--force=*|--force-with-lease=*)
+            is_force_push=1
+            break
+            ;;
+        esac
+      fi
+    done
+  fi
+fi
+
+deny_msg='{"decision":"deny","reason":"/pr の指示があるまで git commit / git push / gh pr create / gh pr merge は禁止されています"}'
+deny_force='{"decision":"deny","reason":"force push は禁止されています"}'
 
 case "$event" in
   UserPromptExpansion)
-    cmd_name=$(echo "$input" | jq -r '.command_name // ""')
-    if [ "$cmd_name" = "pr" ]; then
+    if [ "$is_pr" -eq 1 ]; then
       touch "$flag"
     else
       rm -f "$flag"
     fi
     ;;
   UserPromptSubmit)
-    # /pr 送信時は UserPromptExpansion → UserPromptSubmit の順で数秒以内に
-    # 発火するため、立てた直後のフラグは消さない。それより古いものは
-    # 中断などで Stop が走らなかった残骸なので削除する
-    if [ -f "$flag" ]; then
+    # サブエージェントの submit で親のフラグを消さない
+    if [ -n "$subagent" ] && [ "$subagent" != "null" ]; then
+      exit 0
+    fi
+    if [ "$is_pr" -eq 1 ]; then
+      touch "$flag"
+    elif [ -n "${GROK_HOOK_EVENT:-}" ]; then
+      # Grok は Expansion が無いので、ユーザー発話が /pr でなければ閉じる。
+      # prompt が空の auto-wake では触らない
+      if [ -n "$prompt" ]; then
+        rm -f "$flag"
+      fi
+    elif [ -f "$flag" ]; then
       now=$(date +%s)
       mtime=$(stat -c %Y "$flag" 2>/dev/null || echo 0)
       if [ $((now - mtime)) -gt 15 ]; then
@@ -42,13 +187,18 @@ case "$event" in
     fi
     ;;
   PermissionRequest)
-    if [ -f "$flag" ]; then
-      cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
-      case "$cmd" in
-        *"git commit"* | *"git push"* | *"gh pr create"* | *"gh pr merge"*)
-          echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
-          ;;
-      esac
+    if [ -f "$flag" ] && [ "$is_guarded_git" -eq 1 ] && [ "$is_force_push" -eq 0 ]; then
+      echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+    fi
+    ;;
+  PreToolUse)
+    # Grok のみ。Claude は PermissionRequest で ask を代替する
+    if [ -n "${GROK_HOOK_EVENT:-}" ]; then
+      if [ "$is_force_push" -eq 1 ]; then
+        echo "$deny_force"
+      elif [ "$is_guarded_git" -eq 1 ] && [ ! -f "$flag" ]; then
+        echo "$deny_msg"
+      fi
     fi
     ;;
   Stop)
