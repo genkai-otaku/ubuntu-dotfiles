@@ -32,6 +32,7 @@ SessionStart フックが同ファイルを読み込む。フックが未信頼�
 
 ## /pr
 
-- git commit / push / PR 作成は `/pr` 指示があるまで禁止（CLAUDE.md と同じ）
+- git commit / push / PR 作成は、ユーザー入力の先頭が `/pr` または `$pr` のときだけ許可（CLAUDE.md と同じ）
+- 「PRを出して」などの自然言語では起動しない。`/pr` と打つよう案内する
+- `claude-pr-mode-*` フラグを自分で作ってはならない
 - Codex では `approval_policy = "never"` のため確認は出ない。`pr-mode.sh` が `/pr` 中だけ通し、それ以外は PreToolUse で deny する。`/pr` 中はコマンドをそのまま実行する
-- スキル起動は `/pr` または `$pr`

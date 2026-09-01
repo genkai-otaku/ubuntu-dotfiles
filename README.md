@@ -119,7 +119,7 @@ nix flake update
 ```
 
 ### Claude Codeスキル
-- `/pr`：現在の変更をコミットし、ブランチをpushしてGitHubへPull Requestを作成する
+- `/pr`：ユーザーが `/pr` と打ったときだけ、変更をコミットしブランチをpushしてGitHubへPull Requestを作成する（「PRを出して」では起動しない）
 - `/readme`：READMEをコードベースの現状に合わせて更新（なければ新規作成）する
 - `/clean-branches`：ローカルブランチのうちmain・develop以外を削除して整理する
 

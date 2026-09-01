@@ -54,8 +54,8 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 
 - `CLAUDE.md`：`/pr` の指示があるまで `git commit` / `git push` / `gh pr create` を実行しないよう指示（Claude が試みること自体を抑止）
 - `settings.json` の `permissions.ask`：万一実行しようとしても必ず確認ダイアログが出る強制レイヤー
-- `skills/pr`：`disable-model-invocation: true`。自然言語では起動せず、ユーザーが `/pr` と打ったときだけ動く
-- `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを許可する。force push は `/pr` 中でも許可しない
+- `skills/pr`：`disable-model-invocation: true`。自然言語の「PRを出して」では起動せず、ユーザー入力の先頭が `/pr`（Codex は `$pr`）のときだけ動く
+- `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを許可する。force push は `/pr` 中でも許可しない。フラグファイルをエージェントが作るコマンドは deny する
   - `UserPromptExpansion`（Claude）：スラッシュコマンド展開時、コマンド名が `pr` ならフラグ作成、別コマンドなら削除
   - `UserPromptSubmit`：Claude は残骸フラグを掃除。Grok / Codex は先頭 `/pr`（Codex は `$pr` も）または番兵 `<!-- pr-mode-enable -->` でフラグ作成、それ以外の非空 prompt で削除
   - `PermissionRequest`（Bash、Claude）：フラグがあれば `behavior: allow` を返して ask ダイアログを代替承認

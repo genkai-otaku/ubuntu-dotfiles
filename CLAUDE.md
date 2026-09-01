@@ -82,7 +82,9 @@ git commit / git push / PR作成の制御は三層で成り立っており、**�
 - Grok は `UserPromptExpansion` / `PermissionRequest` が無い。`UserPromptSubmit` で `/pr` を検出し（先頭 `/pr`、またはスキル本文の `<!-- pr-mode-enable -->`）、`PreToolUse` でフラグ無しの対象コマンドを deny する。stdin は camelCase、イベント名は `GROK_HOOK_EVENT`
 - Codex も `UserPromptExpansion` が無い。`codex/hooks.json` が `hooks/run.sh`（`CODEX_HOOK=1`）経由で同じ `pr-mode.sh` を呼ぶ。`UserPromptSubmit` で `/pr` または `$pr`、または番兵を検出し、`PreToolUse` で deny する。stdin は Claude と同じ snake_case。deny の JSON は `hookSpecificOutput.permissionDecision`（Grok の `decision: deny` とは別形式）
 - フラグファイルは `${TMPDIR:-/tmp}/claude-pr-mode-<session_id>`。`Stop` で削除。Claude は15秒より古い残骸を `UserPromptSubmit` で掃除し、Grok / Codex は `/pr` でない非空 prompt で即削除する
-- `/pr` スキルは `disable-model-invocation: true`（自然言語では起動しない）。force push はフラグがあっても許可しない
+- `/pr` スキルは `disable-model-invocation: true`（自然言語では起動しない）。「PRを出して」は `/pr` ではない
+- フラグファイル `claude-pr-mode-*` をエージェントが作るのは PreToolUse で deny する（フック迂回の防止）
+- force push はフラグがあっても許可しない
 - `git -C` / `git -c` 越しの commit/push も対象。`git stash push` は対象外
 
 ## iPhoneプッシュ通知の仕組み（claude-notify）
