@@ -11,7 +11,7 @@ Nix（home-manager standalone）でUbuntu環境を宣言的に管理するため
 | [`../flake.nix`](../flake.nix) | エントリポイント。home-manager standaloneの `homeConfigurations."ubuntu"` を定義し、ホスト名に依存しない構成名 `ubuntu` を固定する。ユーザー名（`username`）はbootstrap.shがそのマシンに合わせて自動で書き換える |
 | [`packages.nix`](packages.nix) | CLIツール群（git・gh・vim・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq）と Nerd Font（UbuntuMono）。バージョンは `flake.lock` で固定される |
 | [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` / `~/.bashrc` / `~/.p10k.zsh` / `~/.gitconfig` / Grok 設定 / VSCode/Cursor 設定の書き込み可能リンク、VSCode IME 用起動ラッパー（`~/.local/bin/code`）と snap desktop の上書き、拡張機能の自動インストール、direnv + nix-direnv、`.claude/` の setup.sh、claude-notify の `pnpm install`、gh の `co` エイリアス、GNOME Terminal のフォント・配色・透明度・サイズ、既定ブラウザ（Chrome） |
-| [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）・Mozcのibusエンジン設定（`~/.config/mozc/ibus_config.textproto`）・カスタムxkbオプション（`~/.config/xkb`。CapsLock単押しを大文字ロックなしの半角/全角キー相当にしてIME切り替え専用にする）。JIS配列・半角/全角キーおよびCapsLockでのIME切り替えという「Windowsの初期状態と同じ」挙動を宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。Mozcのエンジンレイアウトは`"jp"`に固定（既定の`"default"`だとmozc使用中にシステム既定のusレイアウトが残り、IME切り替えキーが送出されない）。ibus の `embed-preedit-text` は `false`（変換中プレビューをアプリへ埋め込まずフローティング窓に出す。VSCode 統合ターミナルの TUI で未確定文字が確定扱いされるのを防ぐ）。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
+| [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）・Mozcのibusエンジン設定（`~/.config/mozc/ibus_config.textproto`）・カスタムxkbオプション（`~/.config/xkb`。CapsLock単押しを大文字ロックなしの半角/全角キー相当にしてIME切り替え専用にする）。JIS配列・半角/全角キーおよびCapsLockでのIME切り替えという「Windowsの初期状態と同じ」挙動を宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。キーリピートは `org/gnome/desktop/peripherals/keyboard` で delay=250ms（Windows Short / Mac GUI 最短付近。GNOME既定の500msだと押しっぱなしが遅く感じる）、repeat-interval=30ms（GNOME既定のまま、Windows 既定とほぼ同じ）。Mozcのエンジンレイアウトは`"jp"`に固定（既定の`"default"`だとmozc使用中にシステム既定のusレイアウトが残り、IME切り替えキーが送出されない）。ibus の `embed-preedit-text` は `false`（変換中プレビューをアプリへ埋め込まずフローティング窓に出す。VSCode 統合ターミナルの TUI で未確定文字が確定扱いされるのを防ぐ）。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
 | [`desktop.nix`](desktop.nix) | GNOMEデスクトップ設定（`dconf.settings`）。ダークテーマ（Yaruパープル）、ウィンドウボタンの左上配置、画面ロック/自動スリープ無効、マウス速度、Dock常駐アプリ、dash-to-dock / tiling-assistant、GNOME Terminal の Ctrl+C/V、ロック画面への通知オフなど。キーボード配列は `keyboard.nix`、端末のフォント・配色は `home.nix`。VSCode / Cursor は独自タイトルバーのためこの `button-layout` を無視するので、左上配置は [`../vscode/README.md`](../vscode/README.md) 側 |
 
 ## 新しいUbuntuマシンのセットアップ手順
@@ -73,7 +73,7 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 
 - 見た目・電源・Dock・端末キーバインド等 → [`desktop.nix`](desktop.nix)
 - ウィンドウボタンの左上配置 → [`desktop.nix`](desktop.nix) の `button-layout`。VSCode / Cursor は独自タイトルバーなので [`../vscode/settings.json`](../vscode/settings.json)（`native` + `compact`）。詳細は [`../vscode/README.md`](../vscode/README.md)
-- キーボード配列・IME切り替え → [`keyboard.nix`](keyboard.nix)
+- キーボード配列・IME切り替え・キーリピート（delay / repeat-interval） → [`keyboard.nix`](keyboard.nix)
 - GNOME Terminal のフォント・配色・透明度・サイズ → [`home.nix`](home.nix) のプロファイル設定（UUIDはUbuntu既定のもの）
 
 いずれも `dconf.settings`。追加・変更したら `home-manager switch`。GUIから変えた内容は次回switchで宣言値に戻る。

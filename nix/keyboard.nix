@@ -12,6 +12,8 @@
   #     コンポジション「_A」（変換候補が出るモード）に切り替えてしまう
   #     ため差し替えている。Shift+CapsLockは従来どおりCaps Lock
   #   - CapsLock/Ctrl入れ替えなどのキー入れ替えはしない
+  #   - キーリピートの初回遅延は Windows Short / Mac に近い 250ms
+  #     （GNOME既定の500msだと押しっぱなしが遅く感じる）
   # 注: ibus-mozc本体はNix管理外（apt install ibus-mozc で導入する）。
   # GNOMEとのIME統合はシステム側にある方がトラブルが少ないため
   dconf.settings = {
@@ -27,6 +29,19 @@
       # 明示宣言により、GUIから設定されたキー入れ替え（ctrl:nocaps・
       # caps:none等）も次回switch時に打ち消される
       xkb-options = [ "custom:caps_zenkaku" ];
+    };
+
+    # キーリピート。Ubuntu / GNOME 既定は delay=500ms で、押しっぱなしの
+    # Backspace が Mac / Windows より遅く感じる。delay は Windows の
+    # KeyboardDelay=0（Short、約250ms）に合わせる。Mac の GUI 最短は
+    # InitialKeyRepeat=15（約225ms）。repeat-interval は GNOME 既定の
+    # 30ms のまま（Windows 既定 KeyboardSpeed=31 ≒ 32ms とほぼ同じ）。
+    # uint32 必須（素の整数だと型不一致）。GUI から変えた値は次回
+    # switch でここに戻る
+    "org/gnome/desktop/peripherals/keyboard" = {
+      delay = lib.hm.gvariant.mkUint32 250;
+      repeat-interval = lib.hm.gvariant.mkUint32 30;
+      repeat = true;
     };
 
     # 変換中プレビューをアプリへ埋め込まない。既定の true だと VSCode 統合
