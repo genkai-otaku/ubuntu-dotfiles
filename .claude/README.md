@@ -8,12 +8,13 @@
 | ファイル | 役割 |
 | :--- | :--- |
 | `settings.json` | Claude Code の設定（フック・言語・effortLevel・permissions など） |
-| `CLAUDE.md` | 全プロジェクト向けグローバル指示（日本語・Git制限・Nix運用・新規devShell・モデル運用）。このリポジトリ専用の運用書はルートの `CLAUDE.md` |
+| `CLAUDE.md` | 全プロジェクト向けグローバル指示（日本語・Git制限・Nix運用・モデル運用）。新規devShellの手順は `nix-setup` スキル。このリポジトリ専用の運用書はルートの `CLAUDE.md` |
 | `hooks/notify.sh` | Stop / Notification 時に iPhone へプッシュ通知するフック（送信本体は dotfiles 同梱の `claude-notify/send-push.mjs`、受信側PWAは claude-notify-mobile リポジトリ）。Claude Code / Grok CLI / Codex CLI 対応 |
 | `hooks/pr-mode.sh` | `/pr` 実行中だけ git commit / push / PR作成を自動許可するフック（Claude / Grok / Codex） |
 | `skills/readme/SKILL.md` | `/readme` スキル：READMEを最新状態に更新（なければ新規作成） |
 | `skills/pr/SKILL.md` | `/pr` スキル：変更をコミット・pushしてGitHubにPRを作成 |
 | `skills/clean-branches/SKILL.md` | `/clean-branches` スキル：ローカルブランチのうちmain・develop以外を削除して整理 |
+| `skills/nix-setup/SKILL.md` | `/nix-setup` スキル：新規プロジェクトの開発環境をNix devShell + direnvでセットアップ |
 | `claude-notify.example.json` | iPhone プッシュ通知（claude-notify）設定のテンプレート |
 | `setup.sh` | `.claude/` 配下の全ファイルを `~/.claude` へシンボリックリンクするスクリプト |
 
@@ -26,7 +27,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 `.claude/` 配下の全ファイルが、同じディレクトリ構成のまま `~/.claude` へシンボリックリンクされます。以後はこのリポジトリを編集するだけで全プロジェクトに即反映されます（コピー作業は不要）。
 
 - **ファイルを追加したら再実行するだけ**でリンクされます（スクリプトの修正は不要）。
-- `skills/` や `commands/` などのディレクトリを作れば、そのまま `~/.claude` 配下に反映され、全プロジェクトで使えます。
+- `skills/` や `commands/` などのディレクトリを作れば、そのまま `~/.claude` 配下に反映され、Claude / Grok で使えます。Codex のスキルディレクトリリンクは `home-manager switch` 時（`setup.sh` だけでは `~/.codex/skills/` に入らない）。
 - リポジトリから削除したファイルの切れたリンクは、再実行時に自動で掃除されます。
 - `setup.sh`・`README.md`・`claude-notify.example.json` はリポジトリ管理用のためリンク対象外です。
 

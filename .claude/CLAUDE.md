@@ -15,19 +15,14 @@
 グローバル環境は `~/Dev/kaishi/ubuntu-dotfiles` のNix設定（home-manager）で宣言管理している。開発中に環境を勝手に変更しないこと。
 
 - **グローバルへのインストールを勝手に行わない**：`apt install`・`snap install`・`npm install -g`・`pip install --user` など、プロジェクトの外に影響する恒久的なインストールは、ユーザーが明示的に指示した場合のみ実行する
-- **ツールやランタイムが必要になったら、プロジェクトローカルのNix設定で解決する**：そのリポジトリに `flake.nix` の devShell（`pkgs.mkShell`）を作成・編集して必要なツールを宣言し、`nix develop` 経由で使う。既にdevShellがあるプロジェクトではそこに追記する
+- **ツールやランタイムが必要になったら、プロジェクトローカルのNix設定で解決する**：そのリポジトリの `flake.nix` の devShell（`pkgs.mkShell`）に必要なツールを宣言する。既にdevShellがあるプロジェクトではそこに追記する（手順は `nix-setup` スキル）
 - **一時的な動作確認**は `nix shell nixpkgs#<パッケージ>` / `nix run` を使ってよい（環境に痕跡が残らないため）
 - **プロジェクトローカルの依存**（`npm install`・`pnpm add` などlockファイルで管理されるもの）は通常どおり使ってよい
 - グローバル（dotfilesの `nix/packages.nix` 等）に追加すべきと判断した場合も、勝手に追加せずユーザーに提案する
 
-# 新規開発環境のセットアップ（Nix + direnv）
+# 新規開発環境のセットアップ
 
-新しいプロジェクトの開発環境を用意するときは、PCのグローバル環境を汚さないことを最優先とし、必要なツール・ランタイムはすべてNixのdevShellで宣言管理する。
-
-- **`flake.nix` の devShell（`pkgs.mkShell`）に必要なツールを宣言する**。グローバルへのインストール（`apt install`・`npm install -g` 等）で済ませない
-- **direnvを必ず併用する**。プロジェクトルートに `use flake` と書いた `.envrc` を作成し、`direnv allow` を実行する。これにより `cd` でディレクトリに入ると自動でdevShellがON、出るとOFFになり、手動で `nix develop` を打つ運用はしない（direnv本体とnix-direnvはdotfilesのhome-managerで導入済み）
-- `flake.nix` と `.envrc` はgit追跡に入れる（flakeはgit追跡ファイルしか認識しないため、作成したら最低限 `git add` する）
-- `flake.lock` もコミット対象とし、環境の再現性を担保する
+新しいプロジェクトの開発環境を用意するときは `nix-setup` スキル（Nix devShell + direnv）に従うこと。
 
 # モデル運用ポリシー（オーケストレーター / 実装の分離）
 
