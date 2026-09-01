@@ -36,8 +36,16 @@
       sleep-inactive-ac-type = "nothing";
     };
 
+    # 夜間モードは常時オン。schedule-from と schedule-to を同じ 20:00 に
+    # すると GNOME は 24 時間点灯とみなす（自動スケジュールは使わない）。
+    # 色温度 4700K はスキーマ既定の 2700K より色味が弱い。GUI から変えた
+    # 値は次回 switch でここに戻る
     "org/gnome/settings-daemon/plugins/color" = {
-      night-light-enabled = false;
+      night-light-enabled = true;
+      night-light-schedule-automatic = false;
+      night-light-schedule-from = 20.0;
+      night-light-schedule-to = 20.0;
+      night-light-temperature = lib.hm.gvariant.mkUint32 4700;
     };
 
     # マウス（ナチュラルスクロールなし、速度は手動調整済みの値）
