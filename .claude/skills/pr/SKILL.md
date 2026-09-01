@@ -15,6 +15,7 @@ disable-model-invocation: true
 - このスキルはユーザーの `/pr` 指示によってのみ実行する。それ以外の場面で git commit / git push / gh pr create を実行してはならない
 - Claude Code では `/pr` 実行中だけ `hooks/pr-mode.sh` が `permissions.ask` を自動許可する（それ以外では確認ダイアログが出る）
 - Grok では確認ダイアログは出ない。`pr-mode.sh` の PreToolUse が `/pr` 中だけ git commit / push / PR作成を通し、それ以外は deny する。このスキル実行中は確認なしでコマンドを実行する
+- Codex でも確認ダイアログは出ない（`approval_policy = "never"`）。`~/.codex/hooks.json` 経由の同じ `pr-mode.sh` が `/pr` または `$pr` 中だけ通し、それ以外は PreToolUse で deny する。このスキル実行中は確認なしでコマンドを実行する
 
 ## 手順
 

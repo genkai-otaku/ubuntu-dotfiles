@@ -1,0 +1,67 @@
+{
+  "description": "ubuntu-dotfiles: 共通指示の読込、/pr ガード、iPhone 通知",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat $HOME/.claude/CLAUDE.md",
+            "statusMessage": "Loading global instructions",
+            "additionalContextLimit": 5000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.codex/hooks/run.sh pr-mode"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.codex/hooks/run.sh pr-mode",
+            "statusMessage": "Checking git policy"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.codex/hooks/run.sh pr-mode",
+            "statusMessage": "Checking git policy"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.codex/hooks/run.sh pr-mode"
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.codex/hooks/run.sh notify",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

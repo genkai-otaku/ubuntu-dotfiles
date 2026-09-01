@@ -9,8 +9,8 @@
 | :--- | :--- |
 | `settings.json` | Claude Code の設定（フック・言語・effortLevel・permissions など） |
 | `CLAUDE.md` | 全プロジェクト向けグローバル指示（日本語・Git制限・Nix運用・新規devShell・モデル運用）。このリポジトリ専用の運用書はルートの `CLAUDE.md` |
-| `hooks/notify.sh` | Stop / Notification 時に iPhone へプッシュ通知するフック（送信本体は dotfiles 同梱の `claude-notify/send-push.mjs`、受信側PWAは claude-notify-mobile リポジトリ）。Claude Code / Grok CLI 両対応 |
-| `hooks/pr-mode.sh` | `/pr` 実行中だけ git commit / push / PR作成を自動許可するフック |
+| `hooks/notify.sh` | Stop / Notification 時に iPhone へプッシュ通知するフック（送信本体は dotfiles 同梱の `claude-notify/send-push.mjs`、受信側PWAは claude-notify-mobile リポジトリ）。Claude Code / Grok CLI / Codex CLI 対応 |
+| `hooks/pr-mode.sh` | `/pr` 実行中だけ git commit / push / PR作成を自動許可するフック（Claude / Grok / Codex） |
 | `skills/readme/SKILL.md` | `/readme` スキル：READMEを最新状態に更新（なければ新規作成） |
 | `skills/pr/SKILL.md` | `/pr` スキル：変更をコミット・pushしてGitHubにPRを作成 |
 | `skills/clean-branches/SKILL.md` | `/clean-branches` スキル：ローカルブランチのうちmain・develop以外を削除して整理 |
@@ -39,7 +39,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ## settings.json
 
 - `hooks.Stop` / `hooks.Notification`：`hooks/notify.sh` を実行して iPhone へプッシュ通知
-- `hooks.UserPromptExpansion` / `UserPromptSubmit` / `PermissionRequest` / `PreToolUse`：`hooks/pr-mode.sh`（`/pr` フロー。PreToolUse は Grok の deny 用）
+- `hooks.UserPromptExpansion` / `UserPromptSubmit` / `PermissionRequest` / `PreToolUse`：`hooks/pr-mode.sh`（`/pr` フロー。PreToolUse は Grok / Codex の deny 用）
 - `permissions.ask`：`git commit` / `git push` / `gh pr create` / `gh pr merge` は実行前に必ず確認ダイアログを表示
 - `language`：`japanese`
 - `effortLevel`：`high`
@@ -57,9 +57,9 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 - `skills/pr`：`disable-model-invocation: true`。自然言語では起動せず、ユーザーが `/pr` と打ったときだけ動く
 - `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを許可する。force push は `/pr` 中でも許可しない
   - `UserPromptExpansion`（Claude）：スラッシュコマンド展開時、コマンド名が `pr` ならフラグ作成、別コマンドなら削除
-  - `UserPromptSubmit`：Claude は残骸フラグを掃除。Grok は先頭 `/pr` または番兵 `<!-- pr-mode-enable -->` でフラグ作成、それ以外の非空 prompt で削除
+  - `UserPromptSubmit`：Claude は残骸フラグを掃除。Grok / Codex は先頭 `/pr`（Codex は `$pr` も）または番兵 `<!-- pr-mode-enable -->` でフラグ作成、それ以外の非空 prompt で削除
   - `PermissionRequest`（Bash、Claude）：フラグがあれば `behavior: allow` を返して ask ダイアログを代替承認
-  - `PreToolUse`（Bash、Grok）：フラグが無ければ git commit / push / PR作成を deny（always-approve でも止まる）
+  - `PreToolUse`：force push は三実装とも deny。git commit / push / PR作成の deny は Grok / Codex（always-approve / `approval_policy = never` でも止まる）
   - `Stop`：ターン終了時にフラグ削除
 
 ## iPhone プッシュ通知（claude-notify）
@@ -67,6 +67,8 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 `Stop`（タスク完了）/ `Notification`（確認待ち）イベントで `hooks/notify.sh` を実行し、Web Push で iPhone の PWA に通知します。送信本体（`claude-notify/send-push.mjs`）は**この dotfiles リポジトリに同梱**されており、notify.sh は自身の実体パスから場所を解決します（場所を変えるときだけ `CLAUDE_NOTIFY_CONFIG` / `CLAUDE_NOTIFY_NODE`。通常は不要）。依存（`web-push`）は `home-manager switch` 時に home-manager の activation が `pnpm install --frozen-lockfile` で自動導入します。依存が入っていない PC では何もせず静かに終了します。任意で `filters.quietHours`（`HH:MM` の start/end）を設定するとその時間帯は送りません。受信側の PWA は別リポジトリ claude-notify-mobile（Vercel 配信）にあり、仕組みは同リポジトリの `docs/SETUP.md` を参照。送信側のファイル構成は [`../claude-notify/README.md`](../claude-notify/README.md)。
 
 **Grok CLI でも同じ通知が届きます**。Grok は Claude 互換モード（`compat.claude.hooks`、デフォルト有効）で `~/.claude/settings.json` の hooks を自動で読み込むため、Grok 側の設定は不要です。notify.sh が `GROK_HOOK_EVENT` 環境変数で呼び出し元を判別し、応答完了（`reason == "end_turn"` の Stop）と許可待ち（`notificationType == "permission_prompt"` の Notification）だけをタイトル「(Grok)」付きで通知します（毎ターン発火する idle_prompt は Stop と重複するため送信しません）。
+
+**Codex CLI からも同じ通知が届きます**。Codex は `~/.claude/settings.json` を読まないので `codex/hooks.json` が Stop で同じ `notify.sh` を呼ぶ（`CODEX_HOOK=1`。タイトルは「(Codex)」）。導入後に Codex の `/hooks` でこのフックを trust する必要がある。
 
 新しい PC で使うには（`home-manager switch` 実行後）:
 

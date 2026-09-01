@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# /pr モード管理フック（Claude Code / Grok CLI 両対応）
+# /pr モード管理フック（Claude Code / Grok CLI / Codex CLI 対応）
 #
 # /pr 実行中だけ git commit / git push / gh pr create / gh pr merge を許可する。
 # force push（--force / -f / --force-with-lease）は /pr 中でも許可しない。
@@ -12,6 +12,7 @@
 # - UserPromptSubmit: 前ターンの残骸フラグを掃除（立てた直後のものは残す）
 # - PermissionRequest: フラグがあれば behavior=allow で ask ダイアログを代替承認
 #   （PreToolUse の permissionDecision=allow では permissions.ask を上書きできない）
+# - PreToolUse: force push だけ deny（ask ダイアログで通さない）
 # - Stop: ターン終了時にフラグ削除
 #
 # Grok:
@@ -21,6 +22,16 @@
 #   フラグ作成。それ以外の非空 prompt ではフラグ削除
 # - PreToolUse: フラグが無ければ対象コマンドを deny（always-approve でも止まる）
 # - Stop: フラグ削除
+#
+# Codex:
+# - UserPromptExpansion は無い。判定は UserPromptSubmit（Grok と同じ）
+# - stdin は Claude と同じ snake_case。呼び出しは ~/.codex/hooks/run.sh が
+#   CODEX_HOOK=1 を立てて区別する
+# - 先頭 /pr または $pr、または番兵 <!-- pr-mode-enable --> でフラグ作成
+# - approval_policy=never のため PermissionRequest は通常発火しない。
+#   PreToolUse でフラグ無しの対象コマンドを deny する（Grok と同じ役割）
+# - PreToolUse の deny 形式は Grok と違い hookSpecificOutput.permissionDecision
+# - Stop: フラグ削除。stdout は空のまま（Codex の Stop はプレーンテキスト不可）
 #
 # フラグ: ${TMPDIR:-/tmp}/claude-pr-mode-<session_id>
 
@@ -63,7 +74,7 @@ else
     first=$(printf '%s\n' "$prompt" | sed -n '1p' | tr -d '\r')
     first="${first#"${first%%[![:space:]]*}"}"
     case "$first" in
-      /pr|/pr[[:space:]]*) is_pr=1 ;;
+      /pr|/pr[[:space:]]*|\$pr|\$pr[[:space:]]*) is_pr=1 ;;
     esac
   fi
 fi
@@ -154,8 +165,16 @@ if [ "$sub" = "push" ] || case "$tool_cmd" in *"git push"*) true ;; *) false ;; 
   fi
 fi
 
-deny_msg='{"decision":"deny","reason":"/pr の指示があるまで git commit / git push / gh pr create / gh pr merge は禁止されています"}'
-deny_force='{"decision":"deny","reason":"force push は禁止されています"}'
+deny_reason='/pr の指示があるまで git commit / git push / gh pr create / gh pr merge は禁止されています'
+force_reason='force push は禁止されています'
+if [ -n "${GROK_HOOK_EVENT:-}" ]; then
+  deny_msg=$(printf '{"decision":"deny","reason":"%s"}' "$deny_reason")
+  deny_force=$(printf '{"decision":"deny","reason":"%s"}' "$force_reason")
+else
+  # Claude / Codex
+  deny_msg=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$deny_reason")
+  deny_force=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$force_reason")
+fi
 
 case "$event" in
   UserPromptExpansion)
@@ -172,8 +191,8 @@ case "$event" in
     fi
     if [ "$is_pr" -eq 1 ]; then
       touch "$flag"
-    elif [ -n "${GROK_HOOK_EVENT:-}" ]; then
-      # Grok は Expansion が無いので、ユーザー発話が /pr でなければ閉じる。
+    elif [ -n "${GROK_HOOK_EVENT:-}" ] || [ -n "${CODEX_HOOK:-}" ]; then
+      # Grok / Codex は Expansion が無いので、ユーザー発話が /pr でなければ閉じる。
       # prompt が空の auto-wake では触らない
       if [ -n "$prompt" ]; then
         rm -f "$flag"
@@ -192,11 +211,13 @@ case "$event" in
     fi
     ;;
   PreToolUse)
-    # Grok のみ。Claude は PermissionRequest で ask を代替する
-    if [ -n "${GROK_HOOK_EVENT:-}" ]; then
-      if [ "$is_force_push" -eq 1 ]; then
-        echo "$deny_force"
-      elif [ "$is_guarded_git" -eq 1 ] && [ ! -f "$flag" ]; then
+    # force push は三実装ともここで止める（Claude の ask 許可でも通さない）
+    if [ "$is_force_push" -eq 1 ]; then
+      echo "$deny_force"
+    elif [ -n "${GROK_HOOK_EVENT:-}" ] || [ -n "${CODEX_HOOK:-}" ]; then
+      # git commit / push / PR 作成の deny は Grok / Codex。
+      # Claude は PermissionRequest で ask を代替する
+      if [ "$is_guarded_git" -eq 1 ] && [ ! -f "$flag" ]; then
         echo "$deny_msg"
       fi
     fi

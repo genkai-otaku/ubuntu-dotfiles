@@ -29,7 +29,7 @@
 
 # モデル運用ポリシー（オーケストレーター / 実装の分離）
 
-この節は Claude Code 専用。Grok は `~/.grok/AGENTS.md` に従い、ここに書いたモデル名（Fable 5 / Sonnet / Opus / haiku）や Agent ツールの `model:` 指定は使わない。
+この節は Claude Code 専用。Grok は `~/.grok/AGENTS.md`、Codex は `~/.codex/AGENTS.md` に従い、ここに書いたモデル名（Fable 5 / Sonnet / Opus / haiku）や Agent ツールの `model:` 指定は使わない。
 
 トークン節約のため、メインセッション（Fable 5）は**設計・監査・レビューに専念**し、実装作業は適切なモデルのサブエージェントに切り出して実行すること。
 

@@ -121,6 +121,31 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/AGENTS.md";
       force = true;
     };
+    # Codex CLI の設定。codex 自身もこのファイルへ書き込むため、書き込み可能
+    # リンクにして変更をリポジトリ側へ取り込む（Grok と同じ方式）。
+    # force = true は既存実体ファイルの置き換え用。Codex がリンクを実体で
+    # 置き換えた場合は、下の captureCodexConfigWrites が switch 直前に取り込む
+    ".codex/config.toml" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/config.toml";
+      force = true;
+    };
+    # Codex のグローバル指示（Codex固有の補足のみ。共通ルールは
+    # SessionStart フックが ~/.claude/CLAUDE.md を載せるため重複させない）
+    ".codex/AGENTS.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/AGENTS.md";
+      force = true;
+    };
+    # Codex は ~/.claude/settings.json を読まないので、フック定義は
+    # ~/.codex/hooks.json に置く。Codex はここへ通常書き込まない
+    ".codex/hooks.json" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks.json";
+      force = true;
+    };
+    # Codex フックから .claude/hooks/ の共有スクリプトを呼ぶラッパー
+    ".codex/hooks/run.sh" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks/run.sh";
+      force = true;
+    };
     # VSCode 起動ラッパー。snap の electron-launch が GDK_BACKEND=wayland と
     # --ozone-platform=x11 を同時に立て、IME が二重になって TUI へ変換中プレビュー
     # が漏れるのを、DISABLE_WAYLAND=1 + GDK_BACKEND=x11 + GTK_IM_MODULE=xim で一本化する。
@@ -153,12 +178,80 @@ in
     fi
   '';
 
+  # Codex が ~/.codex/config.toml のシンボリックリンクを実体ファイルで置き換えた
+  # 場合も同様。hooks.json / AGENTS.md は Codex が通常書き込まない。
+  # [projects."/abs/path"] はマシン固有の信頼テーブルなのでリポジトリへ入れない
+  home.activation.captureCodexConfigWrites = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
+    dest="$HOME/.codex/config.toml"
+    src="${dotfilesPath}/codex/config.toml"
+    strip_codex_projects() {
+      awk '
+        /^\[projects/ { skip=1; next }
+        /^\[/ { skip=0 }
+        skip { next }
+        { print }
+      '
+    }
+    if [ -f "$dest" ] && [ ! -L "$dest" ] && [ -f "$src" ] && [ "$dest" -nt "$src" ]; then
+      if ! cmp -s "$src" "$dest"; then
+        tmp="$(mktemp)"
+        strip_codex_projects < "$dest" > "$tmp"
+        run cp "$tmp" "$src"
+        rm -f "$tmp"
+        echo "Codex config.toml の実体変更をリポジトリへ取り込みました"
+      fi
+    fi
+    if [ -f "$src" ]; then
+      tmp="$(mktemp)"
+      strip_codex_projects < "$src" > "$tmp"
+      if ! cmp -s "$src" "$tmp"; then
+        run cp "$tmp" "$src"
+        echo "Codex config.toml から [projects] を除きました"
+      fi
+      rm -f "$tmp"
+    fi
+  '';
+
   # ~/.claude 配下のリンクは既存の setup.sh に委譲する。
   # setup.sh は「リンクが実体ファイルで上書きされた場合に実体側を
   # リポジトリへ取り込んでからリンクし直す」セルフヒーリングを持ち、
   # home-managerの宣言管理では再現できないため、あえて移行しない
   home.activation.linkClaudeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     run /bin/bash ${dotfilesPath}/.claude/setup.sh
+  '';
+
+  # Codex は SKILL.md ファイルのシンボリックリンクを無視する（ディレクトリ
+  # リンクは辿る）。実体は .claude/skills/ と共有し、追加したら次回 switch で入る
+  home.activation.linkCodexSkills = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    skills_src="${dotfilesPath}/.claude/skills"
+    skills_dest="$HOME/.codex/skills"
+    run mkdir -p "$skills_dest"
+    if [ -d "$skills_src" ]; then
+      for d in "$skills_src"/*; do
+        [ -d "$d" ] || continue
+        name="$(basename "$d")"
+        dest="$skills_dest/$name"
+        if [ -L "$dest" ] || [ ! -e "$dest" ]; then
+          run ln -sfn "$d" "$dest"
+        elif [ -d "$dest" ]; then
+          echo "警告: $dest が実体ディレクトリのためスキップしました"
+        fi
+      done
+    fi
+    if [ -d "$skills_dest" ]; then
+      for dest in "$skills_dest"/*; do
+        [ -L "$dest" ] || continue
+        target="$(readlink "$dest")"
+        case "$target" in
+          "$skills_src"/*)
+            if [ ! -d "$target" ]; then
+              run rm "$dest"
+              echo "切れた Codex スキルリンクを削除: $dest"
+            fi
+            ;;
+        esac
+      done
+    fi
   '';
 
   # direnv: .envrc のあるプロジェクトディレクトリに cd した瞬間、
