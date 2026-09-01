@@ -89,7 +89,7 @@ git commit / git push / PR作成の制御は三層で成り立っており、**�
 
 ## iPhoneプッシュ通知の仕組み（claude-notify）
 
-`.claude/hooks/notify.sh` が `Stop` / `Notification` フックから呼ばれ、**このリポジトリ内の** `claude-notify/send-push.mjs` を経由してWeb PushでiPhoneのPWAへ通知する。受信側のPWAのみ別リポジトリ `claude-notify-mobile`（Vercel配信）にある。設計上の注意：
+`.claude/hooks/notify.sh` が `Stop` / `Notification` フックから呼ばれ、**このリポジトリ内の** `claude-notify/send-push.mjs` を経由してWeb PushでiPhoneのPWAへ通知する。Claude の `Notification` は `settings.json` の matcher により `permission_prompt`（許可待ち）のみ対象（`idle_prompt` 等での重複通知を避けるため）。受信側のPWAのみ別リポジトリ `claude-notify-mobile`（Vercel配信）にある。設計上の注意：
 
 - notify.sh は自身の実体パス（`readlink -f`）から dotfiles ルートを解決して送信スクリプトを見つける。環境変数 `CLAUDE_NOTIFY_REPO` は不要になった（PCごとのパス差はリンク解決で吸収される）
 - notify.sh は**何が起きても即 exit 0**（送信スクリプト・jq・nodeの欠如、依存未インストールでも静かに終了し、Claude Codeを止めない）。送信はnohupでバックグラウンド実行
@@ -97,5 +97,5 @@ git commit / git push / PR作成の制御は三層で成り立っており、**�
 - **Codex CLI からも同じ通知が飛ぶ**。Codex は `~/.claude/settings.json` を読まないので `codex/hooks.json` の Stop が `hooks/run.sh`（`CODEX_HOOK=1`）経由で notify.sh を呼ぶ。タイトルは「(Codex)」。導入後に Codex の `/hooks` でフックを trust する必要がある
 - 送信スクリプトは `web-push` に依存する。`claude-notify/node_modules` は `.gitignore` 対象で、`nix/home.nix` の `home.activation.installClaudeNotifyDeps` が `home-manager switch` 時に `pnpm install --frozen-lockfile` を実行して用意する（失敗してもsoft failでswitchは止めない）
 - VAPID鍵・購読情報は `~/.claude/claude-notify.json` に手動配置する（リポジトリには `claude-notify.example.json` のみ含める。**記入済みファイルは秘密鍵を含むため絶対にコミットしない**）
-- 実行ログは `~/.claude/claude-notify.log` に追記される
+- 実行ログは `~/.claude/claude-notify.log` に追記される（1MBを超えると次回送信時に切り詰められる）。`~/.claude/claude-notify.json` はVAPID秘密鍵を含むため、`settings.json` の `permissions.deny`（`Read` ルール）でClaude自身の読み取りも禁止している
 - 新PCでのセットアップ手順・疎通テストは `.claude/README.md`、受信側PWAの設計は claude-notify-mobile リポジトリの `docs/SETUP.md` を参照

@@ -5,6 +5,9 @@
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
       "Bash(gh pr merge:*)"
+    ],
+    "deny": [
+      "Read(~/.claude/claude-notify.json)"
     ]
   },
   "model": "claude-fable-5[1m]",
@@ -68,7 +71,7 @@
     ],
     "Notification": [
       {
-        "matcher": "",
+        "matcher": "permission_prompt",
         "hooks": [
           {
             "type": "command",
