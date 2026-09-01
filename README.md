@@ -1,7 +1,7 @@
 # dotfiles
 
 ## 概要
-Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Codeのグローバル設定（フック・スキル・permissionsなど）、Grok CLI（xAI）の設定もあわせて管理する。`.claude/`配下は`.claude/setup.sh`で`~/.claude`へシンボリックリンクされ（`home-manager switch`時にactivationからも自動実行される）、このリポジトリを編集するだけで全プロジェクトのClaude Code設定に反映される。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLIは`bootstrap.sh`が導入する。
+Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Codeのグローバル設定（フック・スキル・permissionsなど）、Grok CLI（xAI）と Codex CLI（OpenAI）の設定もあわせて管理する。`.claude/`配下は`.claude/setup.sh`で`~/.claude`へシンボリックリンクされ（`home-manager switch`時にactivationからも自動実行される）、このリポジトリを編集するだけで全プロジェクトのClaude Code設定に反映される。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLIは`bootstrap.sh`が導入する。
 
 ## 技術スタック
 - Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`。CLIツールとGNOMEデスクトップのdconf設定の両方を含む）
@@ -11,6 +11,7 @@ Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する
 - Bash（`bootstrap.sh`、`.claude/setup.sh`、`.claude/hooks/`配下のシェルスクリプト）
 - Claude Code（`settings.json` / `CLAUDE.md` / Skills / Hooksによるグローバル設定管理）
 - Grok CLI（xAI。`grok/config.toml`と`grok/AGENTS.md`をhome-manager経由で書き込み可能リンク。本体は`bootstrap.sh`が公式インストーラーで導入）
+- Codex CLI（OpenAI。`codex/config.toml`・`AGENTS.md`・`hooks.json`をhome-manager経由で書き込み可能リンク。スキルは`.claude/skills/`を共有。本体のインストールはbootstrapの対象外）
 - Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Stop/Notification時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
 - GitHub Actions（`.github/workflows/`配下で共通ワークフローを管理し、他リポジトリへ配布）
 - GitHub CLI（`gh`、`/pr`スキル内でPR作成に使用）
@@ -26,7 +27,7 @@ dotfiles/
 ├── nix/
 │   ├── README.md          # Nix運用の詳細ドキュメント
 │   ├── packages.nix       # CLIツール（git・gh・vim・Node.js等。Nixで管理）
-│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ）
+│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・Codex・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ）
 │   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え・キーリピート delay=250ms・TUI向け embed-preedit-text=false）
 │   └── desktop.nix        # GNOMEデスクトップ設定（テーマ・電源・キーバインド・Dock・ウィンドウボタン左上。VSCode側は vscode/）
 ├── git/
@@ -36,6 +37,12 @@ dotfiles/
 │   ├── README.md
 │   ├── config.toml        # Grok CLI（xAI）の設定実体（home.nixが~/.grok/config.tomlへ書き込み可能リンク）
 │   └── AGENTS.md          # Grokのグローバル指示（Grok固有の補足のみ。共通ルールはClaude互換で.claude/CLAUDE.mdが読まれる）
+├── codex/
+│   ├── README.md
+│   ├── config.toml        # Codex CLI（OpenAI）の設定実体（home.nixが~/.codex/config.tomlへ書き込み可能リンク）
+│   ├── AGENTS.md          # Codexのグローバル指示（Codex固有の補足のみ。共通ルールはSessionStartが.claude/CLAUDE.mdを載せる）
+│   ├── hooks.json         # /pr ガードと iPhone 通知（.claude/hooks を run.sh 経由で呼ぶ）
+│   └── hooks/run.sh       # CODEX_HOOK=1 を立てて共有フックを実行するラッパー
 ├── vscode/
 │   ├── README.md          # VSCode/Cursor共通設定の詳細ドキュメント（統合ターミナルの日本語IME含む）
 │   ├── settings.json      # エディタ設定の実体（両エディタで共有）
@@ -112,7 +119,7 @@ nix flake update
 ```
 
 ### Claude Codeスキル
-- `/pr`：現在の変更をコミットし、ブランチをpushしてGitHubへPull Requestを作成する
+- `/pr`：ユーザーが `/pr` と打ったときだけ、変更をコミットしブランチをpushしてGitHubへPull Requestを作成する（「PRを出して」では起動しない）
 - `/readme`：READMEをコードベースの現状に合わせて更新（なければ新規作成）する
 - `/clean-branches`：ローカルブランチのうちmain・develop以外を削除して整理する
 
@@ -137,5 +144,6 @@ cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
 - [VSCode](/vscode/README.md)
 - [git](/git/README.md)
 - [Grok](/grok/README.md)
+- [Codex](/codex/README.md)
 - [Claude Code](/.claude/README.md)
 - [claude-notify](/claude-notify/README.md)

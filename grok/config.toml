@@ -15,3 +15,7 @@ fork_secondary_model = "grok-4.6"
 yolo = false
 compact_mode = false
 permission_mode = "always-approve"
+
+# 調査は親（grok-4.6）より軽いモデルへ。plan / general-purpose は親を継承
+[subagents.models]
+explore = "grok-4.5"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Claude Code の hook（Stop / Notification）から呼ばれ、iPhone へ Web Push 通知を送る。
 # Grok CLI も Claude 互換モード（compat.claude.hooks、デフォルト有効）で
-# ~/.claude/settings.json の同じ hooks を実行するため、このスクリプトは両対応：
+# ~/.claude/settings.json の同じ hooks を実行する。Codex は settings.json を読まない
+# ため ~/.codex/hooks.json から run.sh（CODEX_HOOK=1）経由で呼ばれる。
 # Grok は stdin JSON が camelCase（hookEventName 等、イベント値は小文字）になるので、
 # Grok が全フックに注入する環境変数 GROK_HOOK_EVENT で判別・正規化する。
 # 送信本体は同じ dotfiles リポジトリ内の claude-notify/send-push.mjs
@@ -29,18 +30,27 @@ if [ -z "$input" ]; then
   exit 0
 fi
 
-event="$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)"
-cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+event="$(printf '%s' "$input" | jq -r '.hook_event_name // .hookEventName // empty' 2>/dev/null)"
+cwd="$(printf '%s' "$input" | jq -r '.cwd // .workspaceRoot // empty' 2>/dev/null)"
+# Codex の last_assistant_message は応答全文なので使わない（Web Push は
+# だいたい 4KB 上限。長いと送信が落ち、届いても本文が漏れる）
 message="$(printf '%s' "$input" | jq -r '.message // empty' 2>/dev/null)"
 
-# Grok CLI からの呼び出し（Claude 形式の hook_event_name が無く、GROK_HOOK_EVENT がある）
+# Grok CLI からの呼び出し。判定は GROK_HOOK_EVENT（stdin のキー有無に依存しない）
 source_label=""
-if [ -z "$event" ] && [ -n "${GROK_HOOK_EVENT:-}" ]; then
+if [ -n "${CODEX_HOOK:-}" ]; then
+  source_label=" (Codex)"
+  case "$event" in
+    stop) event="Stop" ;;
+    notification) event="Notification" ;;
+  esac
+fi
+if [ -n "${GROK_HOOK_EVENT:-}" ]; then
   source_label=" (Grok)"
   case "$GROK_HOOK_EVENT" in
     stop) event="Stop" ;;
     notification) event="Notification" ;;
-    *) event="$GROK_HOOK_EVENT" ;;
+    *) [ -n "$event" ] || event="$GROK_HOOK_EVENT" ;;
   esac
 
   # Grok の Stop は応答完了以外（セッション終了時など）にも発火するため、

@@ -1,16 +1,23 @@
 ---
 name: pr
-description: 現在の変更をコミットし、ブランチをpushしてGitHubへPull Requestを作成する。ユーザーが /pr と明示的に指示したときのみ使用する。git commit / git push / gh pr create はこのスキルの実行中に限り許可される。
+description: ユーザー入力の先頭が /pr または $pr のときだけ、変更をコミットしてGitHubへPull Requestを作成する。自然言語の「PRを出して」では使わない。git commit / git push / gh pr create はこのスキルの実行中に限り許可される。
+disable-model-invocation: true
 ---
 
 # PR作成
+
+<!-- pr-mode-enable -->
 
 現在の作業内容をコミットし、GitHubへPull Requestを作成する。
 
 ## 前提
 
-- このスキルはユーザーの `/pr` 指示によってのみ実行する。それ以外の場面で git commit / git push / gh pr create を実行してはならない
-- `/pr` 実行中は `hooks/pr-mode.sh` により git commit / git push / gh pr create が自動許可される（それ以外の場面では `permissions.ask` により必ず確認が入る）
+- このスキルはユーザー入力の先頭が `/pr`（Codex は `$pr` も）のときだけ実行する。「PRを出して」などの自然言語では実行せず、`/pr` と打つよう案内する
+- それ以外の場面で git commit / git push / gh pr create を実行してはならない
+- `claude-pr-mode-*` フラグを自分で作ってフックを迂回してはならない
+- Claude Code では `/pr` 実行中だけ `hooks/pr-mode.sh` が `permissions.ask` を自動許可する（それ以外では確認ダイアログが出る）
+- Grok では確認ダイアログは出ない。`pr-mode.sh` の PreToolUse が `/pr` 中だけ git commit / push / PR作成を通し、それ以外は deny する。このスキル実行中は確認なしでコマンドを実行する
+- Codex でも確認ダイアログは出ない（`approval_policy = "never"`）。`~/.codex/hooks.json` 経由の同じ `pr-mode.sh` が `/pr` または `$pr` 中だけ通し、それ以外は PreToolUse で deny する。このスキル実行中は確認なしでコマンドを実行する
 
 ## 手順
 
