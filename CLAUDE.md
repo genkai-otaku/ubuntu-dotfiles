@@ -71,9 +71,9 @@ cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
 
 git commit / git push / PR作成の制御は三層で成り立っており、**一層だけ変更すると整合が壊れる**：
 
-1. `.claude/CLAUDE.md` — `/pr` 指示があるまでgit操作を禁止する指示
+1. `.claude/CLAUDE.md` — ユーザー入力の先頭が `/pr`（または `$pr`）のときだけgit操作を許可する指示
 2. `.claude/settings.json` の `permissions.ask` — `git commit` / `git push` / `gh pr create` / `gh pr merge` を常に確認対象にする
-3. `.claude/hooks/pr-mode.sh` — `/pr` 実行中だけ上記の確認を自動承認するフラグ管理
+3. `.claude/hooks/pr-mode.sh` — `/pr` 実行中だけ上記の確認を自動承認するフラグ管理。Grok / Codex は確認ダイアログが無いため、フラグが無ければ PreToolUse で deny する
 
 `pr-mode.sh` には実装上の制約がコメントで明記されている。変更時は以下に注意：
 
@@ -84,7 +84,7 @@ git commit / git push / PR作成の制御は三層で成り立っており、**�
 - フラグファイルは `${TMPDIR:-/tmp}/claude-pr-mode-<session_id>`。`Stop` で削除。Claude は15秒より古い残骸を `UserPromptSubmit` で掃除し、Grok / Codex は `/pr` でない非空 prompt で即削除する
 - `/pr` スキルは `disable-model-invocation: true`（自然言語では起動しない）。「PRを出して」は `/pr` ではない
 - フラグファイル `claude-pr-mode-*` をエージェントが作るのは PreToolUse で deny する（フック迂回の防止）。`git commit` / `gh pr create` の本文に名前が出るだけでは deny しない
-- force push はフラグがあっても許可しない
+- force push はフラグがあっても許可しない。判定は引用符内・HEREDOC本文を除いてから行う（PR本文中の `--force` リテラルで誤検知しないため）
 - `git -C` / `git -c` 越しの commit/push も対象。`git stash push` は対象外
 
 ## iPhoneプッシュ通知の仕組み（claude-notify）

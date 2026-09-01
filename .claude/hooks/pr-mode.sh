@@ -12,7 +12,9 @@
 # - UserPromptSubmit: 前ターンの残骸フラグを掃除（立てた直後のものは残す）
 # - PermissionRequest: フラグがあれば behavior=allow で ask ダイアログを代替承認
 #   （PreToolUse の permissionDecision=allow では permissions.ask を上書きできない）
-# - PreToolUse: force push だけ deny（ask ダイアログで通さない）
+# - PreToolUse: force push だけ deny（ask ダイアログで通さない）。
+#   force push 判定は引用符内と HEREDOC 本文を除いてから行う
+#   （PR 本文中の --force リテラルで誤検知しないため）
 # - Stop: ターン終了時にフラグ削除
 #
 # Grok:
@@ -154,14 +156,37 @@ if [ "$is_guarded_git" -eq 0 ]; then
   esac
 fi
 
+# 引用符内と HEREDOC 本文を除く。コミットメッセージや PR 本文の
+# --force リテラルで force push と誤判定しないため
+strip_quoted_and_heredoc() {
+  printf '%s\n' "$1" | awk '
+    hd != "" {
+      line = $0
+      sub(/^\t+/, "", line)
+      if (line == hd) hd = ""
+      next
+    }
+    {
+      if (match($0, /<<-?[ \t]*['\''"]?[A-Za-z_][A-Za-z0-9_]*/)) {
+        tag = substr($0, RSTART, RLENGTH)
+        sub(/<<-?[ \t]*['\''"]?/, "", tag)
+        hd = tag
+      }
+      print
+    }
+  ' | sed -E "s/'[^']*'//g" | sed -E 's/"(\\.|[^"\\])*"//g'
+}
+
+cmd_stripped=$(strip_quoted_and_heredoc "$tool_cmd")
+
 is_force_push=0
-if [ "$sub" = "push" ] || case "$tool_cmd" in *"git push"*) true ;; *) false ;; esac; then
-  case "$tool_cmd" in
+if [ "$sub" = "push" ] || case "$cmd_stripped" in *"git push"*) true ;; *) false ;; esac; then
+  case "$cmd_stripped" in
     *" --force"*|*" --force-with-lease"*) is_force_push=1 ;;
   esac
   if [ "$is_force_push" -eq 0 ]; then
     saw_push=0
-    for t in $tool_cmd; do
+    for t in $cmd_stripped; do
       [ "$t" = "push" ] && saw_push=1
       if [ "$saw_push" -eq 1 ]; then
         case "$t" in

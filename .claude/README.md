@@ -12,7 +12,7 @@
 | `hooks/notify.sh` | Stop / Notification 時に iPhone へプッシュ通知するフック（送信本体は dotfiles 同梱の `claude-notify/send-push.mjs`、受信側PWAは claude-notify-mobile リポジトリ）。Claude Code / Grok CLI / Codex CLI 対応 |
 | `hooks/pr-mode.sh` | `/pr` 実行中だけ git commit / push / PR作成を自動許可するフック（Claude / Grok / Codex） |
 | `skills/readme/SKILL.md` | `/readme` スキル：READMEを最新状態に更新（なければ新規作成） |
-| `skills/pr/SKILL.md` | `/pr` スキル：変更をコミット・pushしてGitHubにPRを作成 |
+| `skills/pr/SKILL.md` | `/pr` スキル：変更をコミット・pushしてGitHubにPRを作成。`disable-model-invocation: true` でユーザー起動限定 |
 | `skills/clean-branches/SKILL.md` | `/clean-branches` スキル：ローカルブランチのうちmain・develop以外を削除して整理 |
 | `skills/nix-setup/SKILL.md` | `/nix-setup` スキル：新規プロジェクトの開発環境をNix devShell + direnvでセットアップ |
 | `claude-notify.example.json` | iPhone プッシュ通知（claude-notify）設定のテンプレート |
@@ -40,7 +40,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ## settings.json
 
 - `hooks.Stop` / `hooks.Notification`：`hooks/notify.sh` を実行して iPhone へプッシュ通知
-- `hooks.UserPromptExpansion` / `UserPromptSubmit` / `PermissionRequest` / `PreToolUse`：`hooks/pr-mode.sh`（`/pr` フロー。PreToolUse は Grok / Codex の deny 用）
+- `hooks.UserPromptExpansion` / `UserPromptSubmit` / `PermissionRequest` / `PreToolUse`：`hooks/pr-mode.sh`（`/pr` フロー。PreToolUse は force push・フラグ改ざんの deny と、Grok / Codex の git deny）
 - `permissions.ask`：`git commit` / `git push` / `gh pr create` / `gh pr merge` は実行前に必ず確認ダイアログを表示
 - `language`：`japanese`
 - `effortLevel`：`high`
@@ -51,12 +51,12 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 
 ## Git操作の制限（/pr フロー）
 
-ユーザーが `/pr` と指示するまで、Claude はコミット・push・PR作成を行いません。`/pr` 実行中は確認なしで一気にPR作成まで進みます。
+ユーザー入力の先頭が `/pr`（Codex は `$pr` も）のときだけ、Claude / Grok / Codex はコミット・push・PR作成を行います。自然言語の「PRを出して」では起動しません。`/pr` 実行中は確認なしで一気にPR作成まで進みます。
 
-- `CLAUDE.md`：`/pr` の指示があるまで `git commit` / `git push` / `gh pr create` を実行しないよう指示（Claude が試みること自体を抑止）
+- `CLAUDE.md`：ユーザー入力の先頭が `/pr`（または `$pr`）のときだけ `git commit` / `git push` / `gh pr create` を実行してよい、と指示（試みること自体を抑止）
 - `settings.json` の `permissions.ask`：万一実行しようとしても必ず確認ダイアログが出る強制レイヤー
 - `skills/pr`：`disable-model-invocation: true`。自然言語の「PRを出して」では起動せず、ユーザー入力の先頭が `/pr`（Codex は `$pr`）のときだけ動く
-- `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを許可する。force push は `/pr` 中でも許可しない。フラグファイルをエージェントが作るコマンドは deny する
+- `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを許可する。force push は `/pr` 中でも許可しない（判定は引用符内・HEREDOC本文を除いてから行う）。フラグファイルをエージェントが作るコマンドは deny する
   - `UserPromptExpansion`（Claude）：スラッシュコマンド展開時、コマンド名が `pr` ならフラグ作成、別コマンドなら削除
   - `UserPromptSubmit`：Claude は残骸フラグを掃除。Grok / Codex は先頭 `/pr`（Codex は `$pr` も）または番兵 `<!-- pr-mode-enable -->` でフラグ作成、それ以外の非空 prompt で削除
   - `PermissionRequest`（Bash、Claude）：フラグがあれば `behavior: allow` を返して ask ダイアログを代替承認
