@@ -1,101 +1,77 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは **このリポジトリ専用**（プロジェクト指示）。全プロジェクト向けは `~/.claude/CLAUDE.md`（実体 `.claude/CLAUDE.md`）。プロジェクト固有のビルド手順・ディレクトリ説明は各リポジトリの CLAUDE.md に書く。ここへ足さない。
 
 ## リポジトリの性質
 
-Ubuntu用の個人dotfilesリポジトリ。ビルド・lint・テストは存在しない。管理対象は10個：
+Ubuntu用の個人dotfiles。ビルド・lint・テストは無い。管理対象：
 
-- `flake.nix` + `nix/` — **Nix（home-manager standalone）によるUbuntu環境の宣言管理**（CLIツール・GNOMEデスクトップのdconf設定）。`nix/desktop.nix` がテーマ・電源管理・キーバインド・Dock・ウィンドウボタン左上配置等のGNOME設定を、`nix/keyboard.nix` がJIS配列・IME切り替え・キーリピート（delay=250ms。GNOME既定の500msは遅すぎる）と ibus の `embed-preedit-text = false`（VSCode 統合ターミナルの TUI 向け。true に戻さない）を宣言する。`bootstrap.sh` が新Ubuntuマシンの1コマンドセットアップを担う（Nix管理外のapt/snapアプリ導入も含む。後述）
-- `vscode/` — **VSCode / Cursor 共通の設定実体**（settings.json・keybindings.json・拡張機能リスト・Linux IME 用起動ラッパー `code`）。`home.nix` が両エディタのUserディレクトリ（`~/.config/{Code,Cursor}/User/`）へ書き込み可能リンクを張り、`install-extensions.sh` が activation 時に拡張機能を導入する。エディタ本体はNix管理外（apt/snap等で手動導入）のため `programs.vscode` モジュールは使わない。ウィンドウボタンの左上一段は GNOME の dconf では効かないので `settings.json` の `window.titleBarStyle` / `menuStyle` / `menuBarVisibility` をセットで持つ（詳細は `vscode/README.md`）。この3つは欠けると右上に戻るか二段メニューになるので、片方だけ変えないこと。統合ターミナルで grok / Claude Code / Codex の日本語が崩れる問題の本体対策は `keyboard.nix`（`vscode/README.md` の「統合ターミナルの日本語IME」）
-- `.claude/` — Claude Codeの**グローバル設定の実体**（settings.json・CLAUDE.md・hooks・skills）
-- `git/` — **gitconfigの実体**（`.gitconfig`）。`home.nix` が `~/.zshrc` と同じ `mkOutOfStoreSymlink` 方式で `~/.gitconfig` へ書き込み可能リンクを張る（既存の実体ファイルを置き換えるため `force = true`）。credential helperはユーザー名非依存のPATH上の `gh` を使う形に正規化してある。**user.name / user.email はリポジトリ（PUBLIC）に含めない**。各PCで `~/.gitconfig.local`（git管理外）に手動配置し、`.gitconfig` 末尾の include で読み込む。gh の `co: pr checkout` エイリアスは `~/.config/gh/config.yml` をgh自身が書き換えるためファイルリンクにはせず、`home.nix` の `home.activation` で `gh alias set` を冪等に実行する
-- `grok/` — **Grok CLI（xAI）の設定実体**（`config.toml` と `AGENTS.md`）。`home.nix` が `mkOutOfStoreSymlink` で `~/.grok/config.toml`・`~/.grok/AGENTS.md` へ書き込み可能リンクを張る。`AGENTS.md` には**Grok固有の補足のみ**（CLAUDE.mdのモデル運用ポリシーのGrok向け読み替え：`spawn_subagent` / explore・plan・general-purpose の使い分け等）を書く。言語・Git制限・Nix運用などの共通ルールはGrokがClaude互換モード（デフォルト有効）で `~/.claude/CLAUDE.md` から読み込むため、AGENTS.mdに**重複させないこと**。`config.toml` の `permission_mode = "always-approve"` により確認ダイアログは出ない。代わりに `pr-mode.sh` の `PreToolUse` が `/pr` 中以外の git commit / push / PR作成を deny する（Grok に無い `UserPromptExpansion` / `PermissionRequest` の代替）。`auth.json` 等の秘密情報・キャッシュ・セッションは `~/.grok` 直下の実体のまま管理対象外。本体は `claude-code` 同様あえてNix管理外で `bootstrap.sh` が公式インストーラーで導入する
-- `codex/` — **Codex CLI（OpenAI）の設定実体**（`config.toml`・`AGENTS.md`・`hooks.json`）。`home.nix` が `mkOutOfStoreSymlink` で `~/.codex/` へ書き込み可能リンクを張る。`AGENTS.md` には**Codex固有の補足のみ**（組み込みエージェント `explorer` / `worker` / `default` の使い分け）。共通ルールは SessionStart フックが `~/.claude/CLAUDE.md` を載せるため重複させない。Codex は Claude 互換モードが無いので `~/.claude/settings.json` を読まない。フックは `hooks.json` が `.claude/hooks/pr-mode.sh` と `notify.sh` を `hooks/run.sh`（`CODEX_HOOK=1`）経由で呼ぶ。スキルは `.claude/skills/` の各ディレクトリを `~/.codex/skills/<name>` へリンクする（Codex は SKILL.md ファイルのシンボリックリンクを無視するためディレクトリ単位）。`approval_policy = "never"` により確認ダイアログは出ない。代わりに `pr-mode.sh` の `PreToolUse` が `/pr` 中以外の git commit / push / PR作成を deny する。`auth.json` 等は `~/.codex` 直下の実体のまま管理対象外。本体のインストールは bootstrap の対象にしない（使うとき公式インストーラーで入れる）
-- `zsh/` — zsh設定（`zsh/.zshrc`）。Oh My Zsh + Powerlevel10k テーマを使用し、本体は `bootstrap.sh` が `~/.oh-my-zsh` へ導入（あえてNix管理外）。direnv フックもここへ直書きする。`zsh/.bashrc` は対話bashを即zshへexecする引き継ぎ用（bashは使わない運用。`NO_ZSH=1 bash` で回避可）
-- `claude-notify/` — iPhoneへのWeb Push通知の**送信側スクリプト**（`send-push.mjs`）。詳細は後述の「iPhoneプッシュ通知の仕組み」参照
-- `.github/workflows/` — **他リポジトリへコピーして使う配布用テンプレート**。ただしリポジトリ内に置かれている以上、`delete-merged-branch.yml`（PRマージ時のブランチ自動削除）は**このリポジトリ自身のPRにも発火する**
-- `commands/` — 個人用の早見表メモ（Claude Code組み込みコマンド一覧・よく使う操作の控え）。名前は似ているが `.claude/commands/`（カスタムスラッシュコマンド）ではなく、setup.shのリンク対象でもない単なるドキュメント
+- `flake.nix` + `nix/` — home-manager standalone（CLI と GNOME dconf）。`keyboard.nix` の ibus `embed-preedit-text = false` は戻さない。`bootstrap.sh` が新マシンの1コマンドセットアップ
+- `vscode/` — VSCode / Cursor 共通設定。書き込み可能リンク（詳細 `vscode/README.md`）
+- `.claude/` — Claude Code の**グローバル**設定実体。全プロジェクトの毎セッションに載るので、プロジェクト固有は書かない
+- `git/` — gitconfig 実体（`user.name` / `user.email` は `~/.gitconfig.local`）
+- `grok/` — Grok CLI 設定実体。共通ルールは `.claude/CLAUDE.md`。本体は bootstrap
+- `zsh/` — Oh My Zsh + Powerlevel10k（本体は bootstrap。Nix 管理外）
+- `claude-notify/` — iPhone Web Push の送信側
+- `.github/workflows/` — 他リポジトリへコピーするテンプレート。このリポジトリの PR にも発火する
+- `commands/` — 早見表。`.claude/commands/` ではない
 
-## 最重要：`.claude/` の編集は全プロジェクトに即反映される
+## 最重要：`.claude/` は全プロジェクトに即反映
 
-`~/.claude/CLAUDE.md` や `~/.claude/settings.json` は、このリポジトリの `.claude/` 配下へのシンボリックリンク。したがって：
+`~/.claude/*` はこの `.claude/` へのリンク。編集するとコミット前でも全セッションの挙動が変わる。`/model` や `/config` の変更もこの `settings.json` に未コミット差分として出る。
 
-- `.claude/` 配下を編集すると、コミット前でも**その場で全プロジェクトのClaude Code挙動が変わる**。試験目的の書き換えでも影響範囲を意識すること
-- 逆に、セッション内の `/model` や `/config` による設定変更はリンクを辿ってこのリポジトリの `settings.json` に書き込まれ、未コミット差分として現れる
-- `.claude/CLAUDE.md` はこのリポジトリ専用の指示ではなく**グローバル指示の実体**。ルートの本ファイルと役割を混同しない
+## グローバルに置くもの / 置かないもの
 
-## アーキテクチャ：Nixによる環境管理
+毎回のコンテキストに載る（Claude: [memory](https://code.claude.com/docs/en/memory)、Grok: [project rules](https://docs.x.ai/docs/build/features/project-rules)）。「消したらミスするか」だけ残す。
 
-`flake.nix` がエントリポイントで、`nix/` 配下の4モジュール（home.nix / packages.nix / keyboard.nix / desktop.nix）を統合する。設計上の不変条件が多いので、編集時は以下を守ること：
+| 置く | 置かない（各プロジェクト側） |
+|---|---|
+| 日本語、`/pr`、Nix グローバルを汚さない、検証の義務 | ビルド/テストコマンド、ディレクトリ構成、言語の標準規約 |
+| 個人スキル（`/pr` `/readme` `/nix-setup` `/clean-branches`） | そのリポジトリ専用のワークフロー |
+| Claude 専用モデル振り分けは `.claude/rules/` | Grok に読ませる共通ルール（`compat.claude.rules = false`） |
 
-- **構成名はホスト名非依存の `ubuntu` 固定**。適用コマンドは常に `--flake <リポジトリ>#ubuntu` と明示する（ホスト名によるフォールバックは意図的に使っていない）
-- **`username` はハードコードが正**。flakeは純粋評価で環境変数を読めないため、`bootstrap.sh` がクローン時に `sed` でそのマシンの実ユーザー名へ書き換える設計。`dotfilesPath` は username から導出され、リポジトリ配置は `~/Dev/kaishi/ubuntu-dotfiles` 固定
-- **flakeはgit追跡ファイルしか認識しない**。`.nix` ファイルを追加したら `git add` しなければ適用時に「ファイルが存在しない」扱いになる（コミットは不要、ステージングで足りる）
-- **`home.nix` の `.claude/` 処理をhome-manager標準管理に「移行」しないこと**。`~/.zshrc` は `mkOutOfStoreSymlink`（書き込み可能リンク）だが、`.claude/` はあえて既存 `setup.sh` をactivationから実行する方式。setup.shのセルフヒーリング（リンクが実体化したとき実体をリポジトリへ取り込む）はhome-managerでは再現できない
-- **direnvのzshフックは `zsh/.zshrc` に直書きが正**。direnv本体は `home.nix` の `programs.direnv`（nix-direnv併用）で導入するが、`~/.zshrc` は `mkOutOfStoreSymlink` でhome-manager非管理のため `enableZshIntegration` ではフックを注入できない。VSCode/Cursor側への反映は `vscode/extensions.txt` の `mkhl.direnv` 拡張が担う
-- **`claude-code` は意図的にNix管理外**（packages.nixのコメント参照）。常に最新版を使うため公式ネイティブインストーラーの自動更新版を採用し、bootstrap.shが導入する
-- **`vscode/` 配下はflake評価時には読まれない**（`mkOutOfStoreSymlink` による絶対パス参照のため）。「git追跡ファイルしか認識しない」ルールの例外で `git add` 不要だが、新しいマシンへ配るにはpushが必要（`bootstrap.sh` はGitHub上のmainをクローンする）。`home.nix` の `editorUserFiles` にある `force = true` は初回適用時に既存実体をリンクへ置き換えるために必要なので外さないこと。拡張機能は `vscode/extensions.txt` から削除しても既存環境からはアンインストールされない（新規環境に入らなくなるだけ）。エディタ本体が未導入ならそのエディタはスキップされ、次回switchで冪等にリトライされる。詳細は `vscode/README.md`
-- **ibus の `embed-preedit-text` は `false` が正**（`nix/keyboard.nix`）。true だと VSCode 統合ターミナルの Grok / Claude Code / Codex で Mozc の未確定文字が確定扱いされ、「この」が「ｋこｎこのこの」になる。インライン下線より TUI で打てることを優先している。Kitty 無効化・local echo off・`vscode/code` ラッパーは補助で、これだけでは直らない
-- **適用（`home-manager switch`）はsudo不要だが環境そのものを書き換えるため、Claude Codeからは実行しない**。設定変更後はユーザーに適用コマンドの実行を依頼する
+## やってはいけないこと
 
-## コマンド
+- `.claude/` の処理を home-manager 標準管理へ移行する — `setup.sh` のセルフヒーリング（Issue #40857）は再現できない
+- `editorUserFiles` の `force = true` を外す
+- `username` ハードコードを動的取得にする — flake は環境変数を読めない
+- direnv フックを `enableZshIntegration` に置き換える — `~/.zshrc` は mkOutOfStoreSymlink
+- `claude-code` / Grok CLI を Nix 管理に入れる
+- `home-manager switch` を実行する — 検証後にユーザーへ依頼
+- `~/.claude/claude-notify.json` を読む・コミットする
+- /pr 四層のうち一層だけ変える
+- `embed-preedit-text` を `true` に戻す
+- `window.titleBarStyle` / `menuStyle` / `menuBarVisibility` を片方だけ変える
+- `grok/AGENTS.md` に共通ルールを重複させる
+- `user.name` / `user.email` をリポジトリに書く
+- `.claude/rules/` に共通ルールを書く — Grok は読まない
 
-### Nix環境の適用・更新（ユーザーのターミナルで実行）
+## 編集時
+
+- 構成名は `ubuntu` 固定。`--flake <リポジトリ>#ubuntu`
+- flake は git 追跡ファイルだけ認識する。`.nix` 追加は `git add`。`vscode/` は例外だが配るには push
+- `.claude/` の追加・削除は `bash .claude/setup.sh`（switch 時にも実行）
+- コマンドは `README.md`
+
+## 変更後の検証（switch はしない）
+
 ```zsh
-# 適用（設定ファイル変更後）
-home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
-
-# 初回（home-manager未導入時）は bash bootstrap.sh（冪等）か
-nix run home-manager/master -- switch --flake .#ubuntu -b hm-backup
-
-# パッケージのバージョン更新（実行後、flake.lock を必ずコミット）
-nix flake update
+nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath
+jq empty .claude/settings.json
+bash -n <スクリプト>
 ```
 
-### 設定の反映
-- `bash .claude/setup.sh` — `.claude/` 配下を `~/.claude` へシンボリックリンク
-  - 冪等だが自動実行はされない。**`.claude/` 配下にファイルを追加・削除したら再実行が必要**（スクリプト自体の修正は不要）。なお `home-manager switch` 時にはactivationからも自動実行される
-  - リンク対象外：`setup.sh`・`README.md`・`claude-notify.example.json`・`.DS_Store`
-  - リンクが実体ファイルで上書きされた場合（claude-code Issue #40857 の既知挙動）は、実体を最新としてリポジトリへ取り込んでからリンクを張り直すセルフヒーリングを持つ
-- `source ~/.zshrc` — zsh設定の反映
-- VSCode/Cursorの設定・キーバインドは、エディタのUIから変更するだけで即リポジトリの `vscode/` に反映される（書き込み可能リンクのため適用コマンド不要）。`vscode/extensions.txt` に追記した拡張機能の導入のみ `home-manager switch` が必要
+`nix eval` は評価まで。activation 失敗は switch でしか分からないので、その旨を添えて依頼する。
 
-### 配布用ワークフローの導入（導入先リポジトリのルートで実行）
-```zsh
-mkdir -p .github/workflows
-cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
-```
+## /pr の四層
 
-## アーキテクチャ：/pr フローの三層構造
+1. `skills/pr` の `disable-model-invocation: true`
+2. `.claude/CLAUDE.md` の禁止指示
+3. `settings.json` の `permissions.ask`
+4. `hooks/pr-mode.sh`（Claude は PermissionRequest で許可/拒否。Grok は PreToolUse で deny。`gh pr merge` は ask）
 
-git commit / git push / PR作成の制御は三層で成り立っており、**一層だけ変更すると整合が壊れる**：
+実装制約は `pr-mode.sh` 先頭コメント。
 
-1. `.claude/CLAUDE.md` — ユーザー入力の先頭が `/pr`（または `$pr`）のときだけgit操作を許可する指示
-2. `.claude/settings.json` の `permissions.ask` — `git commit` / `git push` / `gh pr create` / `gh pr merge` を常に確認対象にする
-3. `.claude/hooks/pr-mode.sh` — `/pr` 実行中だけ上記の確認を自動承認するフラグ管理。Grok / Codex は確認ダイアログが無いため、フラグが無ければ PreToolUse で deny する
+## claude-notify
 
-`pr-mode.sh` には実装上の制約がコメントで明記されている。変更時は以下に注意：
-
-- Claude での `/pr` 判定は `UserPromptExpansion` の `command_name` が正（`UserPromptSubmit` のpromptは展開後の本文）
-- Claude の自動承認は `PermissionRequest` フックで返す（`PreToolUse` の `permissionDecision=allow` では `permissions.ask` を上書きできないため）。force push は Claude でも `PreToolUse` で deny する（ask ダイアログで通さない）
-- Grok は `UserPromptExpansion` / `PermissionRequest` が無い。`UserPromptSubmit` で `/pr` を検出し（先頭 `/pr`、またはスキル本文の `<!-- pr-mode-enable -->`）、`PreToolUse` でフラグ無しの対象コマンドを deny する。stdin は camelCase、イベント名は `GROK_HOOK_EVENT`
-- Codex も `UserPromptExpansion` が無い。`codex/hooks.json` が `hooks/run.sh`（`CODEX_HOOK=1`）経由で同じ `pr-mode.sh` を呼ぶ。`UserPromptSubmit` で `/pr` または `$pr`、または番兵を検出し、`PreToolUse` で deny する。stdin は Claude と同じ snake_case。deny の JSON は `hookSpecificOutput.permissionDecision`（Grok の `decision: deny` とは別形式）
-- フラグファイルは `${TMPDIR:-/tmp}/claude-pr-mode-<session_id>`。`Stop` で削除。Claude は15秒より古い残骸を `UserPromptSubmit` で掃除し、Grok / Codex は `/pr` でない非空 prompt で即削除する
-- `/pr` スキルは `disable-model-invocation: true`（自然言語では起動しない）。「PRを出して」は `/pr` ではない
-- フラグファイル `claude-pr-mode-*` をエージェントが作るのは PreToolUse で deny する（フック迂回の防止）。`git commit` / `gh pr create` の本文に名前が出るだけでは deny しない
-- force push はフラグがあっても許可しない。判定は引用符内・HEREDOC本文を除いてから行う（PR本文中の `--force` リテラルで誤検知しないため）
-- `git -C` / `git -c` 越しの commit/push も対象。`git stash push` は対象外
-
-## iPhoneプッシュ通知の仕組み（claude-notify）
-
-`.claude/hooks/notify.sh` が `Stop` / `Notification` フックから呼ばれ、**このリポジトリ内の** `claude-notify/send-push.mjs` を経由してWeb PushでiPhoneのPWAへ通知する。Claude の `Notification` は `settings.json` の matcher により `permission_prompt`（許可待ち）のみ対象（`idle_prompt` 等での重複通知を避けるため）。受信側のPWAのみ別リポジトリ `claude-notify-mobile`（Vercel配信）にある。設計上の注意：
-
-- notify.sh は自身の実体パス（`readlink -f`）から dotfiles ルートを解決して送信スクリプトを見つける。環境変数 `CLAUDE_NOTIFY_REPO` は不要になった（PCごとのパス差はリンク解決で吸収される）
-- notify.sh は**何が起きても即 exit 0**（送信スクリプト・jq・nodeの欠如、依存未インストールでも静かに終了し、Claude Codeを止めない）。送信はnohupでバックグラウンド実行
-- **Grok CLI からも同じ通知が飛ぶ**。Grok は Claude 互換モード（`compat.claude.hooks`、デフォルト有効）で `~/.claude/settings.json` の hooks を自動実行するため追加登録は不要。ただし Grok の stdin JSON は camelCase（`hookEventName` 等）のため、notify.sh は環境変数 `GROK_HOOK_EVENT` で判別してイベント名を正規化し、通知スパム防止のため **Stop は `reason == "end_turn"` のみ・Notification は `notificationType == "permission_prompt"` のみ**送信する（idle_prompt は Stop と重複するため捨てる）。タイトルには「(Grok)」を付けて区別する
-- **Codex CLI からも同じ通知が飛ぶ**。Codex は `~/.claude/settings.json` を読まないので `codex/hooks.json` の Stop が `hooks/run.sh`（`CODEX_HOOK=1`）経由で notify.sh を呼ぶ。タイトルは「(Codex)」。導入後に Codex の `/hooks` でフックを trust する必要がある
-- 送信スクリプトは `web-push` に依存する。`claude-notify/node_modules` は `.gitignore` 対象で、`nix/home.nix` の `home.activation.installClaudeNotifyDeps` が `home-manager switch` 時に `pnpm install --frozen-lockfile` を実行して用意する（失敗してもsoft failでswitchは止めない）
-- VAPID鍵・購読情報は `~/.claude/claude-notify.json` に手動配置する（リポジトリには `claude-notify.example.json` のみ含める。**記入済みファイルは秘密鍵を含むため絶対にコミットしない**）
-- 実行ログは `~/.claude/claude-notify.log` に追記される（1MBを超えると次回送信時に切り詰められる）。`~/.claude/claude-notify.json` はVAPID秘密鍵を含むため、`settings.json` の `permissions.deny`（`Read` ルール）でClaude自身の読み取りも禁止している
-- 新PCでのセットアップ手順・疎通テストは `.claude/README.md`、受信側PWAの設計は claude-notify-mobile リポジトリの `docs/SETUP.md` を参照
+`notify.sh` が Stop / Notification（`permission_prompt` のみ）から `send-push.mjs` を呼ぶ。失敗しても exit 0。Grok も同じ hooks（タイトルに「(Grok)」）。依存は switch 時の `pnpm install`。鍵は `~/.claude/claude-notify.json`（example のみリポジトリ）。

@@ -10,7 +10,7 @@
       "Read(~/.claude/claude-notify.json)"
     ]
   },
-  "model": "claude-fable-5[1m]",
+  "model": "claude-fable-5-1",
   "hooks": {
     "UserPromptExpansion": [
       {

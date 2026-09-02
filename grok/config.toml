@@ -19,3 +19,11 @@ permission_mode = "always-approve"
 # 調査は親（grok-4.6）より軽いモデルへ。plan / general-purpose は親を継承
 [subagents.models]
 explore = "grok-4.5"
+
+# ~/.claude/rules/ は Claude 専用（モデル運用）。共通ルールは CLAUDE.md
+[compat.claude]
+rules = false
+
+# Codex は使わない
+[compat.codex]
+sessions = false

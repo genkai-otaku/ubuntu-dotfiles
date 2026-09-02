@@ -1,6 +1,6 @@
 ---
 name: pr
-description: ユーザー入力の先頭が /pr または $pr のときだけ、変更をコミットしてGitHubへPull Requestを作成する。自然言語の「PRを出して」では使わない。git commit / git push / gh pr create はこのスキルの実行中に限り許可される。
+description: ユーザーが /pr と打ったときだけ、変更をコミットして GitHub へ Pull Request を作成する。自然言語の「PRを出して」では使わない。
 disable-model-invocation: true
 ---
 
@@ -12,12 +12,11 @@ disable-model-invocation: true
 
 ## 前提
 
-- このスキルはユーザー入力の先頭が `/pr`（Codex は `$pr` も）のときだけ実行する。「PRを出して」などの自然言語では実行せず、`/pr` と打つよう案内する
-- それ以外の場面で git commit / git push / gh pr create を実行してはならない
-- `claude-pr-mode-*` フラグを自分で作ってフックを迂回してはならない
-- Claude Code では `/pr` 実行中だけ `hooks/pr-mode.sh` が `permissions.ask` を自動許可する（それ以外では確認ダイアログが出る）
-- Grok では確認ダイアログは出ない。`pr-mode.sh` の PreToolUse が `/pr` 中だけ git commit / push / PR作成を通し、それ以外は deny する。このスキル実行中は確認なしでコマンドを実行する
-- Codex でも確認ダイアログは出ない（`approval_policy = "never"`）。`~/.codex/hooks.json` 経由の同じ `pr-mode.sh` が `/pr` または `$pr` 中だけ通し、それ以外は PreToolUse で deny する。このスキル実行中は確認なしでコマンドを実行する
+- ユーザーが `/pr` と打ったときだけ実行する。「PRを出して」では実行せず、`/pr` と打つよう案内する
+- それ以外で git commit / git push / gh pr create を実行してはならない
+- `claude-pr-mode-*` フラグを自分で作ってはならない
+- Claude: `/pr` 中だけ `pr-mode.sh` が ask を自動許可。フラグ無しは deny。`gh pr merge` は自動許可しない。`git commit` / `git push` / `gh pr create` は **1つずつ**（`&&` `;` `|` で繋ぐと確認に落ちる）
+- Grok: 確認は出ない。PreToolUse が `/pr` 中だけ通し、それ以外は deny。このスキル中は確認なしで実行する
 
 ## 手順
 
