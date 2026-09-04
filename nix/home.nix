@@ -100,6 +100,11 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/zsh/.p10k.zsh";
       force = true;
     };
+    # tmux。force = true は壊れた store リンクや既存実体を置き換えるため
+    ".tmux.conf" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/tmux/.tmux.conf";
+      force = true;
+    };
     # git設定。force = true は既存の実体ファイル ~/.gitconfig をリンクへ
     # 置き換えるために必要。user.name / user.email はリポジトリに含めず、
     # 各PCで手動配置する ~/.gitconfig.local（git管理外）から include される
@@ -159,6 +164,14 @@ in
   # home-managerの宣言管理では再現できないため、あえて移行しない
   home.activation.linkClaudeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     run /bin/bash ${dotfilesPath}/.claude/setup.sh
+  '';
+
+  # OpenSSH サーバーと Tailscale。システムサービスなので Nix では入れず setup.sh に委譲する。
+  # bootstrap.sh からも同じスクリプトを実行する。switch 中は TTY が無く sudo できないので、
+  # 入っていれば確認だけで終わる（未導入なら警告を出して switch は止めない）
+  home.activation.ensureSshTailscale = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run /bin/bash ${dotfilesPath}/ssh-tailscale/setup.sh \
+      || echo "警告: OpenSSH / Tailscale の確認に失敗しました（ssh-tailscale/README.md）"
   '';
 
   # direnv: .envrc のあるプロジェクトディレクトリに cd した瞬間、

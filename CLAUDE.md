@@ -11,8 +11,10 @@ Ubuntu用の個人dotfiles。ビルド・lint・テストは無い。管理対�
 - `.claude/` — Claude Code の**グローバル**設定実体。全プロジェクトの毎セッションに載るので、プロジェクト固有は書かない
 - `git/` — gitconfig 実体（`user.name` / `user.email` は `~/.gitconfig.local`）
 - `grok/` — Grok CLI 設定実体。共通ルールは `.claude/CLAUDE.md`。本体は bootstrap
-- `zsh/` — Oh My Zsh + Powerlevel10k（本体は bootstrap。Nix 管理外）
+- `zsh/` — Oh My Zsh + Powerlevel10k（本体は bootstrap。Nix 管理外）。SSH時は tmux へ attach
+- `tmux/` — SSH切断後もセッションを残す。本体は packages.nix
 - `claude-notify/` — iPhone Web Push の送信側
+- `ssh-tailscale/` — iPhoneからTailscale経由SSH。`bootstrap.sh` と `home-manager switch` が setup.sh を実行。ログインは手動。鍵確認前に PasswordAuthentication を切らない
 - `.github/workflows/` — 他リポジトリへコピーするテンプレート。このリポジトリの PR にも発火する
 - `commands/` — 早見表。`.claude/commands/` ではない
 

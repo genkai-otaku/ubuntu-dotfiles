@@ -7,10 +7,10 @@ Nix（home-manager standalone）でUbuntu環境を宣言的に管理するため
 
 | ファイル | 役割 |
 |---|---|
-| [`../bootstrap.sh`](../bootstrap.sh) | 新しいUbuntuマシンの1コマンドセットアップ。クローン・username書き換え・home-manager適用に加え、Oh My Zsh・Claude Code / Grok CLI・IME・VSCode / Slack / Chrome まで冪等に導入する |
+| [`../bootstrap.sh`](../bootstrap.sh) | 新しいUbuntuマシンの1コマンドセットアップ。クローン・username書き換え・home-manager適用に加え、Oh My Zsh・Claude Code / Grok CLI・IME・VSCode / Slack / Chrome・OpenSSH / Tailscale まで冪等に導入する |
 | [`../flake.nix`](../flake.nix) | エントリポイント。home-manager standaloneの `homeConfigurations."ubuntu"` を定義し、ホスト名に依存しない構成名 `ubuntu` を固定する。ユーザー名（`username`）はbootstrap.shがそのマシンに合わせて自動で書き換える |
-| [`packages.nix`](packages.nix) | CLIツール群（git・gh・vim・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq）と Nerd Font（UbuntuMono）。バージョンは `flake.lock` で固定される |
-| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` / `~/.bashrc` / `~/.p10k.zsh` / `~/.gitconfig` / Grok 設定 / VSCode/Cursor 設定の書き込み可能リンク、VSCode IME 用起動ラッパー（`~/.local/bin/code`）と snap desktop の上書き、拡張機能の自動インストール、direnv + nix-direnv、`.claude/` の setup.sh、claude-notify の `pnpm install`、gh の `co` エイリアス、GNOME Terminal のフォント・配色・透明度・サイズ、既定ブラウザ（Chrome） |
+| [`packages.nix`](packages.nix) | CLIツール群（git・gh・vim・Node.js・pnpm・Docker CLI・docker-compose・supabase-cli・jq・tmux）と Nerd Font（UbuntuMono）。バージョンは `flake.lock` で固定される |
+| [`home.nix`](home.nix) | home-manager設定。`~/.zshrc` / `~/.bashrc` / `~/.p10k.zsh` / `~/.tmux.conf` / `~/.gitconfig` / Grok 設定 / VSCode/Cursor 設定の書き込み可能リンク、VSCode IME 用起動ラッパー（`~/.local/bin/code`）と snap desktop の上書き、拡張機能の自動インストール、direnv + nix-direnv、`.claude/` の setup.sh、OpenSSH / Tailscale の `ssh-tailscale/setup.sh`、claude-notify の `pnpm install`、gh の `co` エイリアス、GNOME Terminal のフォント・配色・透明度・サイズ、既定ブラウザ（Chrome） |
 | [`keyboard.nix`](keyboard.nix) | GNOMEのキーボード設定（`dconf.settings`）・Mozcのibusエンジン設定（`~/.config/mozc/ibus_config.textproto`）・カスタムxkbオプション（`~/.config/xkb`。CapsLock単押しを大文字ロックなしの半角/全角キー相当にしてIME切り替え専用にする）。JIS配列・半角/全角キーおよびCapsLockでのIME切り替えという「Windowsの初期状態と同じ」挙動を宣言し、GUIから行われたキー入れ替え等の変更を次回switch時に打ち消す。キーリピートは `org/gnome/desktop/peripherals/keyboard` で delay=250ms（Windows Short / Mac GUI 最短付近。GNOME既定の500msだと押しっぱなしが遅く感じる）、repeat-interval=30ms（GNOME既定のまま、Windows 既定とほぼ同じ）。Mozcのエンジンレイアウトは`"jp"`に固定（既定の`"default"`だとmozc使用中にシステム既定のusレイアウトが残り、IME切り替えキーが送出されない）。ibus の `embed-preedit-text` は `false`（変換中プレビューをアプリへ埋め込まずフローティング窓に出す。VSCode 統合ターミナルの TUI で未確定文字が確定扱いされるのを防ぐ）。ibus-mozc本体はNix管理外（`apt install ibus-mozc` で導入する） |
 | [`desktop.nix`](desktop.nix) | GNOMEデスクトップ設定（`dconf.settings`）。ダークテーマ（Yaruパープル）、ウィンドウボタンの左上配置、画面ロック/自動スリープ無効、夜間モード常時オン（4700K。from=to=20:00 で 24 時間点灯）、マウスは adaptive 加速 + speed -0.3（通常速度とフリック最高速を 0 より少し遅くする。以前の -0.51 は遅すぎて大きな腕の移動が要った）、Dock常駐アプリ、dash-to-dock / tiling-assistant、GNOME Terminal の Ctrl+C/V、ロック画面への通知オフなど。キーボード配列は `keyboard.nix`、端末のフォント・配色は `home.nix`。VSCode / Cursor は独自タイトルバーのためこの `button-layout` を無視するので、左上配置は [`../vscode/README.md`](../vscode/README.md) 側 |
 
@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/boots
 2. Nixのインストール（Determinate Systemsインストーラー。flakesが最初から有効）
 3. `~/Dev/kaishi` を作成してリポジトリをクローン
 4. `flake.nix` の `username` をそのマシンの実際のユーザー名に書き換え
-5. home-managerの初回適用
+5. home-managerの初回適用（CLIに tmux、`~/.tmux.conf`、`.zshrc` の SSH 時自動 attach を含む）
 6. ログインシェルをzshへ変更（`chsh`）
 7. Oh My Zsh と Powerlevel10k を導入（あえてNix管理外。`~/.oh-my-zsh` へ git clone）
 8. Claude Code CLIの導入（常に最新版を使うため、Nix管理ではなく公式インストーラーの自動更新版を採用）
@@ -36,8 +36,9 @@ curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/boots
 10. VSCode（`code --classic`）と Slack をsnapで導入
 11. Google Chrome を公式debで導入
 12. Grok CLIの導入（公式インストーラーの自動更新版。あえてNix管理外）
+13. OpenSSH サーバーと Tailscale の導入（iPhoneからの遠隔SSH。`ssh-tailscale/setup.sh`。デーモンはNix管理外）
 
-ステップ5の初回 `home-manager switch` はステップ10の VSCode 導入より先に走るため、その時点では拡張機能のインストールはスキップされる。bootstrap完了後にもう一度 `home-manager switch` すれば入る。9〜11 はsudoが使えない環境では警告してスキップする。
+ステップ5の初回 `home-manager switch` はステップ10の VSCode 導入より先に走るため、その時点では拡張機能のインストールはスキップされる。bootstrap完了後にもう一度 `home-manager switch` すれば入る。9〜11・13 はsudoが使えない環境では警告してスキップする。
 
 ユーザー名が書き換わった場合は、適用後に `flake.nix` の差分をコミットしておく。
 
@@ -55,6 +56,7 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 - **`~/.gitconfig.local`** — `user.name` / `user.email`（PUBLIC に含めない。`git/.gitconfig` 末尾の include で読む）
 - **`~/.claude/claude-notify.json`** — iPhone 通知を使う場合。example をコピー。VAPID 秘密鍵のためコミット禁止。詳細は [`../.claude/README.md`](../.claude/README.md)
 - **サインイン** — Chrome、Slack、`gh auth login`、SSH 鍵
+- **`sudo tailscale up`** — iPhoneからSSHする場合。同じアカウントでログイン。iPhone側の手順は [`../ssh-tailscale/README.md`](../ssh-tailscale/README.md)
 
 日本語 Ubuntu（`ja_JP.UTF-8`、`Asia/Tokyo`）を想定する。英語版から入れた場合はタイムゾーンとロケールを合わせる。
 

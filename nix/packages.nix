@@ -23,6 +23,7 @@
 
     # ユーティリティ
     jq
+    tmux # iPhone SSH 切断後も grok 等を残す。zshrc が SSH 時だけ attach
 
     # フォント。Powerlevel10kのアイコン・区切り記号の描画に必要なNerd Font。
     # Ubuntu標準ターミナルと同じ細い字幅を保つためUbuntuMonoのNerd Font版を使う

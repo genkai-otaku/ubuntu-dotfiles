@@ -1,11 +1,12 @@
 # dotfiles
 
 ## 概要
-Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Codeのグローバル設定（フック・スキル・permissionsなど）、Grok CLI（xAI）の設定もあわせて管理する。`.claude/`配下は`.claude/setup.sh`で`~/.claude`へシンボリックリンクされ（`home-manager switch`時にactivationからも自動実行される）、このリポジトリを編集するだけで全プロジェクトのClaude Code設定に反映される。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLIは`bootstrap.sh`が導入する。
+Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、tmux（iPhone SSH切断後も grok を残す）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Codeのグローバル設定（フック・スキル・permissionsなど）、Grok CLI（xAI）の設定もあわせて管理する。`.claude/`配下は`.claude/setup.sh`で`~/.claude`へシンボリックリンクされ（`home-manager switch`時にactivationからも自動実行される）、このリポジトリを編集するだけで全プロジェクトのClaude Code設定に反映される。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLI、外出先のiPhoneからTailscale経由でSSHするためのOpenSSH / Tailscaleは`bootstrap.sh`が導入する。tmux本体はNix、SSH時の自動attachは`.zshrc`。
 
 ## 技術スタック
 - Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`。CLIツールとGNOMEデスクトップのdconf設定の両方を含む）
 - Zsh（Oh My Zsh + Powerlevel10k。プロンプト設定は`zsh/.p10k.zsh`。本体は`bootstrap.sh`が導入し、あえてNix管理外）
+- tmux（`packages.nix`。iPhoneからのSSH時に`.zshrc`が自動attach。切断してもセッションが残る）
 - VSCode / Cursor（`vscode/`配下の共通設定をhome-manager経由で書き込み可能リンクし、拡張機能をactivation時に自動導入）
 - direnv / nix-direnv（`nix/home.nix`のhome-manager設定で導入。`.envrc`のあるプロジェクトディレクトリでflakeのdevShellを自動ON/OFF）
 - Bash（`bootstrap.sh`、`.claude/setup.sh`、`.claude/hooks/`配下のシェルスクリプト）
@@ -50,15 +51,21 @@ dotfiles/
 │   └── workflows/
 │       └── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
 ├── zsh/
-│   ├── .zshrc            # Oh My Zsh + Powerlevel10k の設定と direnv フック
+│   ├── .zshrc            # Oh My Zsh + Powerlevel10k、SSH時のtmux attach、direnv フック
 │   ├── .bashrc           # 対話bashを即zshへexecする引き継ぎ用
 │   ├── .p10k.zsh         # Powerlevel10kの見た目設定（macOS風の最小構成）
 │   └── README.md
+├── tmux/
+│   ├── README.md         # SSH切断後もセッションを残す説明
+│   └── .tmux.conf        # 256色・履歴（home.nix が ~/.tmux.conf へリンク）
 ├── claude-notify/         # iPhoneプッシュ通知の送信スクリプト（.claude/hooks/notify.sh から呼ばれる）
 │   ├── README.md
 │   ├── send-push.mjs     # Web Push送信本体（VAPID署名。設定は ~/.claude/claude-notify.json）
 │   ├── package.json      # 依存は web-push のみ
 │   └── pnpm-lock.yaml    # node_modules は activation 時に自動導入（gitignore）
+├── ssh-tailscale/         # iPhoneからTailscale経由SSH（OpenSSH + Tailscale。本体はNix管理外）
+│   ├── README.md         # iPhone側の接続手順とUbuntu側の残作業
+│   └── setup.sh          # OpenSSH / Tailscale を冪等に導入（bootstrap と home-manager switch から実行）
 └── .claude/
     ├── CLAUDE.md          # 全プロジェクト向けグローバル指示（言語・Git・Nix・検証）。プロジェクト固有は書かない
     ├── rules/orchestration.md # Claude Code 専用のモデル振り分け（Grok は読まない）
@@ -81,7 +88,7 @@ dotfiles/
 ```zsh
 curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/bootstrap.sh | bash
 ```
-`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code CLIの導入、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、最後にGrok CLIの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、各アプリへのサインイン等）は[nix/README.md](/nix/README.md)を参照。
+`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用（tmux・`.tmux.conf`・SSH時の自動attachを含む）、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code CLIの導入、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、Grok CLIの導入、OpenSSHサーバーとTailscaleの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、`sudo tailscale up`、iPhoneのTailscale / SSHアプリ、各アプリへのサインイン等）は[nix/README.md](/nix/README.md)と[ssh-tailscale/README.md](/ssh-tailscale/README.md)を参照。tmuxは追加作業なし（SSHした時点で入る）。
 
 ### Nix環境の適用・更新（2回目以降）
 ```zsh
@@ -122,6 +129,7 @@ nix flake update
 ### セットアップスクリプト
 - `bash .claude/setup.sh`：`.claude/`配下を`~/.claude`へシンボリックリンク
 - `bash vscode/install-extensions.sh`：`vscode/extensions.txt`の拡張機能をVSCode/Cursorへ導入（`home-manager switch`時にも自動実行される。冪等）
+- OpenSSH / Tailscale：`bootstrap.sh` と `home-manager switch` の両方で `ssh-tailscale/setup.sh` が自動実行される（ログインだけ `sudo tailscale up` が手動。iPhone側は [ssh-tailscale/README.md](/ssh-tailscale/README.md)）
 
 ### GitHub Actionsワークフローのコピー
 導入したいリポジトリのルートに移動して、そのまま実行する：
@@ -142,3 +150,5 @@ cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
 - [Grok](/grok/README.md)
 - [Claude Code](/.claude/README.md)
 - [claude-notify](/claude-notify/README.md)
+- [iPhoneからSSH（Tailscale）](/ssh-tailscale/README.md)
+- [tmux](/tmux/README.md)
