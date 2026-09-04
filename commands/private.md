@@ -45,6 +45,10 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 - `~/.claude/claude-notify.json`（iPhone通知を使う場合）
 - Docker Engine + `docker` グループ
 - `gh auth login`、SSH鍵、各アプリへのサインイン
+- `sudo tailscale up`（未ログインのときだけ。iPhone側は `ssh-tailscale/README.md`）
+- iPhone SSH は自動で tmux（切断しても grok が残る。詳細は `tmux/README.md`）
+
+OpenSSH / Tailscale は `bootstrap.sh` と `home-manager switch` が `ssh-tailscale/setup.sh` を実行する。
 
 ### パッケージの更新
 
