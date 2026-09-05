@@ -133,7 +133,7 @@ nix flake update
 
 ### セットアップスクリプト
 - `bash .claude/setup.sh`：`.claude/`配下（gitが管理するファイルのみ）を`~/.claude`へシンボリックリンク
-- `bash .claude/tests/run.sh`：`.claude/`の構文チェックとフック（pr-mode・guard-destructive・validate-claude-config）のテーブル駆動テスト。`.claude/hooks/`を変更したら必ず通す
+- `bash .claude/tests/run.sh`：`.claude/`の構文チェックとフック（pr-mode・guard-destructive・validate-claude-config）のテーブル駆動テスト。test-pr-mode.sh は HOME を隔離するので本物の `~/.claude/pr-mode.log` は増えない。`.claude/hooks/`を変更したら必ず通す
 - `nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath`：`flake.nix` / `nix/`の評価エラーと`git add`漏れを検出（`switch`の前に流す）
 - `.claude/dev-roots`（削除・作業ディレクトリの許可ルート。1行1パス・`~/`始まり・`#`から行末はコメント）を変更したときは、`git add .claude/dev-roots`のうえで上記を実行し、`bash .claude/setup.sh`も再実行する
 - `bash vscode/install-extensions.sh`：`vscode/extensions.txt`の拡張機能をVSCode/Cursorへ導入（`home-manager switch`時にも自動実行される。冪等）
