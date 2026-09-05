@@ -24,6 +24,17 @@ let
       force = true;
     };
   };
+
+  # ~/Dev 配下の作業用ルートディレクトリ。唯一の定義は .claude/dev-roots（1 行 1 パス、~/ 始まり。
+  # guard-destructive.sh の削除許可ルートと同じファイルを読む）。新しいマシンでも同じ配置で作業を
+  # 始められるようにする（中身の各リポジトリは対象外）。flake は git 追跡ファイルしか読めないので、
+  # dev-roots を変更したら git add すること
+  # 読み方（# 以降を落とす・前後の空白を除く・末尾の / を落とす・~/ 始まりの行だけ採る）は
+  # guard-destructive.sh とテスト（DR / DC）と揃えてある
+  devDirs = map (m: "${config.home.homeDirectory}/${lib.removeSuffix "/" (lib.removePrefix "~/" (lib.head m))}")
+    (lib.filter (m: m != null)
+      (map (l: builtins.match "[[:space:]]*(~/[^#]*[^#[:space:]])[[:space:]]*(#.*)?" l)
+        (lib.splitString "\n" (builtins.readFile ../.claude/dev-roots))));
 in
 {
   home.username = username;
@@ -137,6 +148,15 @@ in
   // editorUserFiles "Code" # VSCode
   // editorUserFiles "Cursor";
 
+  # .claude/dev-roots の各ディレクトリを activation 時に用意する（既にあれば何もしない）。
+  # bootstrap.sh の初回適用でも 2回目以降の home-manager switch でも走る。
+  # activation の PATH は最小構成なので mkdir は coreutils のフルパスで呼ぶ。
+  # 作業ディレクトリは作れて当然なので失敗時は switch を止める
+  # （claude-notify の soft fail とは意図的に非対称）
+  home.activation.createDevDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArgs devDirs}
+  '';
+
   # 拡張機能は「ファイル」ではなく「インストール状態」なのでリンクでは管理できない。
   # vscode/extensions.txt のIDリストを activation 時に VSCode / Cursor へ流し込む。
   # リストから消しても既存環境からはアンインストールされない
@@ -162,8 +182,10 @@ in
   # setup.sh は「リンクが実体ファイルで上書きされた場合に実体側を
   # リポジトリへ取り込んでからリンクし直す」セルフヒーリングを持ち、
   # home-managerの宣言管理では再現できないため、あえて移行しない
+  # setup.sh は配布対象を「git が知るファイル」に限定するため git を PATH に通す
+  # （activation の PATH は最小構成で git が無い）
   home.activation.linkClaudeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    run /bin/bash ${dotfilesPath}/.claude/setup.sh
+    run env PATH="${pkgs.git}/bin:$PATH" /bin/bash ${dotfilesPath}/.claude/setup.sh
   '';
 
   # OpenSSH サーバーと Tailscale。システムサービスなので Nix では入れず setup.sh に委譲する。

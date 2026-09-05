@@ -13,4 +13,8 @@
 
 ## /pr
 
-確認ダイアログは出ない。フラグ無しの commit / push / PR作成は `pr-mode.sh` の PreToolUse が deny する。
+確認ダイアログは出ない。フラグ無しの commit / push / PR作成は `pr-mode.sh` の PreToolUse が deny する。force push は `/pr` 中でも deny。自動許可対象外の git 書き込みは hook の ask（always-approve でも確認になる）。
+
+## 破壊的操作
+
+`guard-destructive.sh` の deny は止まる。ask は always-approve でも確認プロンプトになる。許可ルートは `.claude/dev-roots`（共通ルールは `~/.claude/CLAUDE.md`）。

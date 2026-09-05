@@ -1,13 +1,66 @@
 {
   "permissions": {
+    "deny": [
+      "Read(~/.claude/claude-notify.json)",
+      "Read(~/.claude/history.jsonl)",
+      "Read(~/.ssh/id_*)",
+      "Read(~/.ssh/*.pem)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gh/hosts.yml)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.netrc)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.kube/config)",
+      "Read(~/.npmrc)",
+      "Read(//**/.env)",
+      "Read(//**/.env.local)",
+      "Read(//**/.env.development)",
+      "Read(//**/.env.development.local)",
+      "Read(//**/.env.production)",
+      "Read(//**/.env.production.local)",
+      "Read(//**/.env.staging)",
+      "Read(//**/.env.staging.local)",
+      "Read(//**/.env.test)",
+      "Read(//**/.env.test.local)",
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.development)",
+      "Read(**/.env.development.local)",
+      "Read(**/.env.production)",
+      "Read(**/.env.production.local)",
+      "Read(**/.env.staging)",
+      "Read(**/.env.staging.local)",
+      "Read(**/.env.test)",
+      "Read(**/.env.test.local)",
+      "Bash(sudo:*)"
+    ],
     "ask": [
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
-      "Bash(gh pr merge:*)"
-    ],
-    "deny": [
-      "Read(~/.claude/claude-notify.json)"
+      "Bash(gh pr merge:*)",
+      "Bash(apt:*)",
+      "Bash(apt-get:*)",
+      "Bash(snap install:*)",
+      "Bash(snap refresh:*)",
+      "Bash(snap remove:*)",
+      "Bash(npm install -g:*)",
+      "Bash(npm install --global:*)",
+      "Bash(npm i -g:*)",
+      "Bash(pnpm add -g:*)",
+      "Bash(pnpm add --global:*)",
+      "Bash(pnpm install -g:*)",
+      "Bash(yarn global:*)",
+      "Bash(pip install --user:*)",
+      "Bash(pip3 install --user:*)",
+      "Bash(pipx install:*)",
+      "Bash(uv tool install:*)",
+      "Bash(cargo install:*)",
+      "Bash(gem install:*)",
+      "Bash(go install:*)",
+      "Bash(nix profile:*)",
+      "Bash(nix-env:*)",
+      "Bash(home-manager:*)"
     ]
   },
   "model": "claude-fable-5-1",
@@ -32,6 +85,23 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/pr-mode.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/guard-destructive.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "matcher": "Bash",
@@ -43,13 +113,13 @@
         ]
       }
     ],
-    "PreToolUse": [
+    "PostToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Edit|Write|NotebookEdit|write|search_replace",
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hooks/pr-mode.sh"
+            "command": "bash $HOME/.claude/hooks/validate-claude-config.sh"
           }
         ]
       }
