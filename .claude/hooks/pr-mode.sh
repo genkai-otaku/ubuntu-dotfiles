@@ -1,41 +1,90 @@
 #!/bin/bash
 
 # /pr モード管理フック（Claude Code / Grok CLI）
-#
-# /pr 実行中だけ git commit / git push / gh pr create を許可する。
-# gh pr merge は自動許可しない（Claude は permissions.ask へ落とす。
-# Grok は確認が無いのでフラグ無しなら PreToolUse で deny）。
-# force push（--force / -f / --force-with-lease）は /pr 中でも許可しない。
+# ユーザーが /pr を実行しているターンの間だけ、git commit / git push /
+# gh pr create を許可する。それ以外の場面では同コマンドを実行前に拒否する。
+# gh pr merge は常に ask。force push は /pr 中でも deny。
 #
 # Claude Code:
-# - UserPromptExpansion: command_name が pr ならフラグ作成、別コマンドなら削除
+# - UserPromptExpansion: command_name が "pr" ならフラグ作成、別コマンドなら削除
 #   （UserPromptSubmit の prompt は展開後のスキル本文なので、スラッシュコマンド名の
 #     判定は Expansion の command_name が正）
-# - UserPromptSubmit: 前ターンの残骸フラグを掃除（立てた直後のものは残す）
-# - PermissionRequest: フラグがあれば対象の単一コマンドを behavior=allow で
-#   自動承認する（PreToolUse の permissionDecision=allow では permissions.ask を
-#   上書きできない）。複合コマンドと gh pr merge は確認へ落とす。
-#   フラグが無ければ git commit / git push / gh pr create を deny
-# - PreToolUse: force push だけ deny（ask で通さない）。
-#   判定は引用符内と HEREDOC 本文を除いてから行う
+# - UserPromptSubmit: プロンプトが /pr（またはその展開本文）でなければフラグを削除。
+#   中断などで Stop が走らず残った残骸フラグをここで確実に消す
+#   （UserPromptExpansion との発火順は保証されないが、/pr のときは Expansion 側が
+#     後から touch し直すので成立する）
+# - PreToolUse(Bash): フラグが無ければ、コミット・push・PR作成を含むコマンドを
+#   permissionDecision=deny で拒否する。force push とフラグ改ざんは /pr 中でも deny。
+#   PreToolUse は permission mode（auto / acceptEdits / bypassPermissions）や allow
+#   ルールに関係なく毎回発火し、deny は必ず効くため、最終防衛層はここに置く
+# - PermissionRequest(Bash): フラグがあれば、対象コマンドを decision.behavior=allow で
+#   自動承認する（PreToolUse の allow では permissions.ask を上書きできないため、
+#   ask ダイアログの代替はこのイベントで行う）
 # - Stop: ターン終了時にフラグ削除
 #
 # Grok:
 # - UserPromptExpansion / PermissionRequest は無い
-# - stdin は camelCase、イベント名は GROK_HOOK_EVENT
-# - UserPromptSubmit: 先頭 /pr、または番兵 <!-- pr-mode-enable --> でフラグ作成。
-#   それ以外の非空 prompt ではフラグ削除
-# - PreToolUse: フラグが無ければ対象コマンドを deny（always-approve でも止まる）
+# - stdin は camelCase、イベント名は GROK_HOOK_EVENT、ツール名は run_terminal_command
+#   （matcher "Bash" はエイリアスで当たる。スクリプト側でも両方見る）
+# - UserPromptSubmit: 先頭 /pr、番兵 <!-- pr-mode-enable -->、または SKILL.md の H1
+#   でフラグ作成。それ以外の非空 prompt ではフラグ削除（空の auto-wake では触らない）
+# - PreToolUse: フラグが無ければ対象コマンドを deny（always-approve でも止まる）。
+#   /pr 中でも force push は deny。自動承認条件を満たさない git 書き込みは ask
+#   （hook の ask は always-approve でも確認プロンプトになる）
 # - Stop: フラグ削除
 #
-# フラグ: ${TMPDIR:-/tmp}/claude-pr-mode-<session_id>
+# 自動承認の条件（すべて満たすときだけ allow。満たさなければ何も出力せず通常の
+# 確認ダイアログに落とす。拒否はしない）:
+# - コマンド文字列が git commit / git push / gh pr create で始まる
+# - 引用符の中身と HEREDOC 本文を除いた上で、複合コマンド・コマンド置換・
+#   リダイレクトを含まない（&& || ; | & $( ` <( >( > <。2>&1 は許容）。
+#   除去は lib/strip-shell.awk（引用符の種別を追跡する状態機械）で行う。
+#   HEREDOC の 2 行目以降は ")" で始まる行だけ許す（"$(cat <<'EOF' … EOF\n)" の定型）
+# - git push: force 系（--force* / -f を含む短縮群 / +refspec）、削除系（--delete /
+#   -d / :branch）、--mirror、--no-verify、main / master への push を含まない。
+#   さらに cwd の現在ブランチが main / master なら落とす
+# - git commit: --no-verify / -n を含む短縮群 / --amend を含まない
+# - gh pr create: 別リポジトリ宛（-R / --repo）を含まない
+# - 引用符を含むトークン（"--force" / --for"ce" / -"f" / "main" / ma'in'）は、引用符を取り除いた形が
+#   オプション（- で始まる）か main / master 宛なら落とす（引用符の中身は除去されるので、
+#   引用符を残した版のトークンごとに見る）。push の引数に変数（$BRANCH）を含まない
+# - 除去処理が失敗した・引用符が閉じていない場合は複合扱い（安全側）。
+#   拒否判定側は逆に、除去に失敗したら生文字列で判定する（fail-open にしない）
+#
+# 拒否判定（フラグ無し）は、除去後の文字列に対する正規表現で行う。
+# git [-C dir] [-c k=v] commit|push、/usr/bin/git、\git（エイリアス回避）、command git、env X=1 git、
+# "git push;" / "(git push)" のような区切り直前の形を捕捉し、引用符の中のリテラル（git log --grep "git commit" 等）
+# は拒否しない。gh api は /pulls への書き込み（POST / -f / --input）と GraphQL の createPullRequest
+# （gh api / graphql の文脈にあるものだけ）を対象にし、GET（PR 一覧・コメント取得）は拒否しない。
+# session_id の無い PreToolUse / PermissionRequest は /pr 中と確認できないので拒否側で扱う（fail-open にしない）。
+# bash -c / sh -c / eval で引用符の中を実行する場合だけ生文字列の部分一致も併用する。
+# 既知の抜け道: git alias 経由（git -c alias.x=commit x）は捕捉しない（CLAUDE.md の指示で抑止）。
+#
+# 制約:
+# - フラグは session_id 単位。/pr の git 操作をサブエージェントに委譲すると
+#   別セッション扱いで拒否される（SKILL.md で「メインが直接実行」と明記）
+# - Stop でフラグが消えるため、/pr の途中でターンを終えて質問すると次ターンは拒否
+#   される（SKILL.md で AskUserQuestion を使う旨を明記）
+# - jq が無い・入力 JSON が壊れている場合は何もせず exit 0（~/.claude/pr-mode.log に記録）。
+#   どのイベントでも exit 0 固定（Stop / UserPromptSubmit での exit 2 は処理を止めるため）
+# - 判定 JSON は Claude 形式（hookSpecificOutput.permissionDecision）。Grok も同じキーを読む
+
+LOG="$HOME/.claude/pr-mode.log"
+SELF="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")"
+STRIP_AWK="$(dirname "$SELF")/lib/strip-shell.awk"
+
+logmsg() { printf '%s %s\n' "$(date +%FT%T)" "$*" >>"$LOG" 2>/dev/null; }
 
 if ! command -v jq >/dev/null 2>&1; then
+  logmsg "jq が見つからないため pr-mode は無効です（PATH=${PATH}）"
   exit 0
 fi
 
 input=$(cat)
-event=$(printf '%s' "$input" | jq -r '.hook_event_name // .hookEventName // empty')
+if ! event=$(printf '%s' "$input" | jq -r '.hook_event_name // .hookEventName // empty' 2>/dev/null); then
+  logmsg "入力 JSON を解釈できません"
+  exit 0
+fi
 if [ -z "$event" ] && [ -n "${GROK_HOOK_EVENT:-}" ]; then
   event="$GROK_HOOK_EVENT"
 fi
@@ -47,250 +96,252 @@ case "$event" in
   stop) event=Stop ;;
 esac
 
-session="${GROK_SESSION_ID:-}"
+# JSON の session を優先する。GROK_SESSION_ID は JSON に無いときだけ使う
+# （テストや他セッションの環境変数でフラグ経路が差し替わらないように）
+session=$(printf '%s' "$input" | jq -r '.session_id // .sessionId // empty')
+if [ -z "$session" ] && [ -n "${GROK_HOOK_EVENT:-}" ]; then
+  session="${GROK_SESSION_ID:-}"
+fi
 if [ -z "$session" ]; then
-  session=$(printf '%s' "$input" | jq -r '.session_id // .sessionId // "unknown"')
-fi
-flag="${TMPDIR:-/tmp}/claude-pr-mode-${session}"
-
-cmd_name=$(printf '%s' "$input" | jq -r '.command_name // .commandName // empty')
-prompt=$(printf '%s' "$input" | jq -r '.prompt // .user_prompt // .userPrompt // empty')
-tool_cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // .toolInput.command // empty')
-subagent=$(printf '%s' "$input" | jq -r '.subagentType // .subagent_type // empty')
-
-is_pr=0
-if [ "$cmd_name" = "pr" ]; then
-  is_pr=1
-else
-  case "$prompt" in
-    *'<!-- pr-mode-enable -->'*) is_pr=1 ;;
-  esac
-  if [ "$is_pr" -eq 0 ]; then
-    first=$(printf '%s\n' "$prompt" | sed -n '1p' | tr -d '\r')
-    first="${first#"${first%%[![:space:]]*}"}"
-    case "$first" in
-      /pr|/pr[[:space:]]*) is_pr=1 ;;
-    esac
-  fi
-fi
-
-# git/gh のサブコマンドを、先頭の env 代入と git/gh グローバルオプションを剥がして取る。
-# `git stash push` を push 扱いしない。引用符は無視して空白分割する（十分）。
-git_or_gh_sub() {
-  local -a w
-  local i=0 bin sub
-  read -r -a w <<< "$1"
-  while [ "$i" -lt "${#w[@]}" ]; do
-    case "${w[$i]}" in
-      *=*) i=$((i + 1)) ;;
-      *) break ;;
-    esac
-  done
-  bin="${w[$i]:-}"
-  bin="${bin##*/}"
-  i=$((i + 1))
-  case "$bin" in
-    git)
-      while [ "$i" -lt "${#w[@]}" ]; do
-        case "${w[$i]}" in
-          -c|-C|--git-dir|--work-tree|--namespace|--super-prefix|--config-env)
-            i=$((i + 2)) ;;
-          --git-dir=*|--work-tree=*|--namespace=*|--super-prefix=*|--config-env=*)
-            i=$((i + 1)) ;;
-          -*)
-            i=$((i + 1)) ;;
-          *)
-            break ;;
-        esac
-      done
-      printf '%s' "${w[$i]:-}"
-      ;;
-    gh)
-      while [ "$i" -lt "${#w[@]}" ]; do
-        case "${w[$i]}" in
-          --repo|-R|--hostname)
-            i=$((i + 2)) ;;
-          --repo=*|--hostname=*)
-            i=$((i + 1)) ;;
-          -*)
-            i=$((i + 1)) ;;
-          *)
-            break ;;
-        esac
-      done
-      if [ "${w[$i]:-}" = "pr" ]; then
-        printf 'pr %s' "${w[$((i + 1))]:-}"
-      else
-        printf '%s' "${w[$i]:-}"
-      fi
-      ;;
-  esac
-}
-
-is_guarded_git=0
-sub=$(git_or_gh_sub "$tool_cmd")
-case "$sub" in
-  commit|push|"pr create"|"pr merge") is_guarded_git=1 ;;
-esac
-# bash -c 'git commit ...' など、ラッパー越しは部分一致に倒す
-if [ "$is_guarded_git" -eq 0 ]; then
-  case "$tool_cmd" in
-    *"git commit"*|*"git push"*|*"gh pr create"*|*"gh pr merge"*) is_guarded_git=1 ;;
-  esac
-fi
-
-# フラグはフックだけが作る。エージェントが touch / リダイレクトで迂回するのを止める。
-# git commit / gh pr create の本文にフラグ名が出るだけでは deny しない
-is_flag_tamper=0
-if [ "$is_guarded_git" -eq 0 ]; then
-  case "$tool_cmd" in
-    *claude-pr-mode-*) is_flag_tamper=1 ;;
-  esac
-fi
-
-# 引用符内と HEREDOC 本文を除く。コミットメッセージや PR 本文の
-# --force リテラルで force push と誤判定しないため
-strip_quoted_and_heredoc() {
-  printf '%s\n' "$1" | awk '
-    hd != "" {
-      line = $0
-      sub(/^\t+/, "", line)
-      if (line == hd) hd = ""
-      next
-    }
-    {
-      if (match($0, /<<-?[ \t]*['\''"]?[A-Za-z_][A-Za-z0-9_]*/)) {
-        tag = substr($0, RSTART, RLENGTH)
-        sub(/<<-?[ \t]*['\''"]?/, "", tag)
-        hd = tag
-      }
-      print
-    }
-    END { if (hd != "") print ";" }   # 終端が見つからないHEREDOCは安全側へ
-  ' | sed -E "s/'[^']*'//g" | sed -E 's/"(\\.|[^"\\])*"//g'
-}
-
-cmd_stripped=$(strip_quoted_and_heredoc "$tool_cmd")
-
-# 自動許可は git commit / git push / gh pr create の単一コマンドに限る。
-# gh pr merge は ask に落とす（スキル手順外）
-is_pr_auto_allow=0
-case "$sub" in
-  commit|push|"pr create") is_pr_auto_allow=1 ;;
-esac
-if [ "$is_pr_auto_allow" -eq 0 ]; then
-  case "$sub" in
-    "pr merge") ;;
+  case "$event" in
+    PreToolUse | PermissionRequest)
+      # フラグの所在が分からない = /pr 中と確認できないので、フラグ無し（拒否側）として扱う
+      logmsg "session_id が無い ${event} を /pr 外として扱いました"
+      flag="" ;;
     *)
-      case "$tool_cmd" in
-        *"git commit"*|*"git push"*|*"gh pr create"*) is_pr_auto_allow=1 ;;
-      esac
-      ;;
+      logmsg "session_id が無いイベント（${event}）を無視しました"
+      exit 0 ;;
   esac
-fi
-
-# 複合コマンドは自動許可しない（decision がリクエスト全体に掛かるため）。
-# 2>&1 / <& / &> のリダイレクト単体は複合とみなさない
-is_composite=0
-case "$cmd_stripped" in
-  *'&&'* | *'||'* | *';'* | *'|'* ) is_composite=1 ;;
-esac
-if [ "$is_composite" -eq 0 ]; then
-  case "$cmd_stripped" in
-    *'&'*)
-      case "$cmd_stripped" in
-        *'>&'*|*'<&'*|*'&>'*) ;;
-        *) is_composite=1 ;;
-      esac
-      ;;
-  esac
-fi
-
-is_force_push=0
-if [ "$sub" = "push" ] || case "$cmd_stripped" in *"git push"*) true ;; *) false ;; esac; then
-  case "$cmd_stripped" in
-    *" --force"*|*" --force-with-lease"*) is_force_push=1 ;;
-  esac
-  if [ "$is_force_push" -eq 0 ]; then
-    saw_push=0
-    for t in $cmd_stripped; do
-      [ "$t" = "push" ] && saw_push=1
-      if [ "$saw_push" -eq 1 ]; then
-        case "$t" in
-          -f|--force|--force-with-lease|--force=*|--force-with-lease=*)
-            is_force_push=1
-            break
-            ;;
-        esac
-      fi
-    done
-  fi
-fi
-
-deny_reason='/pr の指示があるまで git commit / git push / gh pr create / gh pr merge は禁止されています'
-force_reason='force push は禁止されています'
-flag_reason='pr-mode フラグはフック以外が作成・変更してはならない'
-if [ -n "${GROK_HOOK_EVENT:-}" ]; then
-  deny_msg=$(printf '{"decision":"deny","reason":"%s"}' "$deny_reason")
-  deny_force=$(printf '{"decision":"deny","reason":"%s"}' "$force_reason")
-  deny_flag=$(printf '{"decision":"deny","reason":"%s"}' "$flag_reason")
 else
-  # Claude
-  deny_msg=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$deny_reason")
-  deny_force=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$force_reason")
-  deny_flag=$(printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}' "$flag_reason")
+  flag="${TMPDIR:-/tmp}/claude-pr-mode-${session}"
 fi
+
+# 引用符の中身と HEREDOC 本文を除去する。失敗時は ";" を返して複合扱いにする
+strip_cmd() {
+  local out
+  if [ ! -f "$STRIP_AWK" ]; then printf ';'; return; fi
+  out=$(printf '%s\n' "$1" | awk -f "$STRIP_AWK" 2>/dev/null) || { printf ';'; return; }
+  if [ -z "$out" ] && [ -n "$1" ]; then printf ';'; return; fi
+  printf '%s' "$out"
+}
+
+# 拒否判定用: 除去に失敗したとき（awk が無い等）は生文字列で判定する。
+# ";" だけを返して「何も含まない」と見なすと拒否側が fail-open になるため
+stripped_or_raw() {
+  local st
+  st=$(strip_cmd "$1")
+  [ "$st" = ';' ] && st="$1"
+  printf '%s' "$st"
+}
+
+# 除去後の文字列にコミット・push・PR作成が含まれるか（引数: 生コマンド, 除去後）
+is_git_write() {
+  local raw="$1" s="$2"
+  # 行継続（\ + 改行）を結合し、改行は区切り ";" にして 1 行で判定する
+  s=${s//\\$'\n'/ }
+  s=${s//$'\n'/;}
+  local wrap='(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|command|env|exec|nohup|time|builtin)[[:space:]]+)*'
+  local gitopt='((-[cC]|--git-dir|--work-tree|--namespace)[[:space:]]+[^[:space:]]+[[:space:]]+|--?[A-Za-z][^[:space:]]*[[:space:]]+)*'
+  # 末尾は空白・行末のほか ; & | ) も区切りとして扱う（"git push;" / "(git push)" / "{ git push; }" の形）。
+  # コマンド語直前の \（\git のエイリアス回避）も許す
+  local re="(^|[[:space:];&|(\`])${wrap}([^[:space:]]*/)?\\\\?git[[:space:]]+${gitopt}(commit|push)([[:space:];&|)<>]|\$)"
+  local re_gh="(^|[[:space:];&|(\`])${wrap}([^[:space:]]*/)?\\\\?gh[[:space:]]+pr[[:space:]]+create([[:space:];&|)<>]|\$)"
+  # gh api は /pulls エンドポイントへの書き込み（-X POST/PUT/PATCH、または -f / -F / --input による暗黙の POST）
+  # だけを PR 作成とみなす。GET（PR 一覧・/pulls/N/comments 等の取得）は拒否しない
+  local re_api="(^|[[:space:];&|(\`])${wrap}([^[:space:]]*/)?\\\\?gh[[:space:]]+api[[:space:]]+[^;&|]*[^[:space:];&|]*/pulls([[:space:]]|\$)"
+  printf '%s\n' "$s" | grep -Eq -- "$re" && return 0
+  printf '%s\n' "$s" | grep -Eq -- "$re_gh" && return 0
+  if printf '%s\n' "$s" | grep -Eq -- "$re_api"; then
+    printf '%s\n' "$s" | grep -Eq -- '(^|[[:space:]])(-X|--method)[[:space:]=]+(POST|PUT|PATCH)([[:space:]]|$)|(^|[[:space:]])(-f|-F|--field|--raw-field|--input)([[:space:]=]|$)' \
+      && ! printf '%s\n' "$s" | grep -Eq -- '(^|[[:space:]])(-X|--method)[[:space:]=]+GET([[:space:]]|$)' && return 0
+  fi
+  # GraphQL の createPullRequest mutation（クエリは引用符の中なので生文字列で見る。
+  # gh api / graphql の文脈にあるときだけ。grep createPullRequest のような読み取りでは発動しない）
+  case "$s" in *gh*api* | *graphql*) case "$raw" in *createPullRequest*) return 0 ;; esac ;; esac
+  # 引用符・HEREDOC・パイプでシェルに文字列を渡す形（bash -c "…" / sh -c / eval … / bash <<EOF / … | sh）は
+  # リテラル判定ができないので生文字列で見る。単語としての eval / sh だけを対象にし、
+  # "eval" を含むファイル名等（tests/eval, evaluate）や ssh では発動しない
+  if printf '%s\n' "$raw" | grep -Eq -- '(^|[[:space:];&|(`])(eval[[:space:]]|([^[:space:]]*/)?(ba|z|da|k)?sh[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-[A-Za-z]*c[A-Za-z]*([[:space:]]|$)|([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]*<<)|\|[[:space:]]*([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]|$)'; then
+    case "$raw" in *'git commit'* | *'git push'* | *'gh pr create'*) return 0 ;; esac
+  fi
+  return 1
+}
+
+# /pr 中の自動承認対象か（引数: 生コマンド）。対象なら 0
+is_auto_approvable() {
+  local raw="$1" s rest flat
+  case "$raw" in "git push" | "git push "* | "gh pr create" | "gh pr create "* | "git commit "*) ;; *) return 1 ;; esac
+
+  s=$(strip_cmd "$raw")
+  # 許容する定型だけ判定前に取り除く: "$(cat <<'EOF'" と 2>&1 系
+  s=$(printf '%s\n' "$s" | sed -E "s/\\\$\\(cat[[:space:]]+<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_-]*['\"]?//; s/[0-9]*>&[0-9]+//g; s/<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_-]*['\"]?//")
+  # 2 行目以降は ")" で始まる行だけ許す（"$(cat <<'EOF' … EOF\n)" の閉じ行）
+  rest=$(printf '%s\n' "$s" | sed -E '1d; /^[[:space:]]*(\).*)?$/d' | grep -c .)
+  [ "$rest" -gt 0 ] && return 1
+  case "$s" in
+    *'&&'* | *'||'* | *';'* | *'|'* | *'&'* | *'$('* | *'`'* | *'<('* | *'>('* | *'>'* | *'<'*) return 1 ;;
+  esac
+  # オプションの検査は閉じ行 ")" 以降も含めた全行に対して行う
+  # （閉じ行に --amend や --force を置く抜け道を塞ぐ）
+  flat=$(printf '%s' "$s" | tr '\n' ' ')
+  # 引用符の中身は除去済みなので、引用符付き・引用符で割ったオプション（"--force" / --for"ce" / -"f"）と
+  # 引用された main / master（"main" / ma'in' / "HEAD:main"）は引用符を残した版をトークンごとに見る:
+  # 引用符を含むトークンは、引用符を取り除いた形がオプション（- で始まる）か main / master 宛なら落とす
+  # （引用符の中の空白は \001 なので、"docs: --amend の説明" のようなメッセージは 1 トークンのまま）
+  local kq tok nq
+  kq=$(printf '%s\n' "$raw" | awk -v keepq=1 -f "$STRIP_AWK" 2>/dev/null | tr '\n' ' ')
+  set -f
+  for tok in $kq; do
+    nq=${tok//[\"\']/}
+    [ "$tok" = "$nq" ] && continue
+    case "$nq" in -*) set +f; return 1 ;; esac
+    printf '%s\n' "$nq" | grep -Eq -- '(^|[:/])(main|master)$' && { set +f; return 1; }
+  done
+  set +f
+  case "$raw" in
+    "git push"*)
+      # 変数入りの refspec（$BRANCH）は宛先を特定できないので落とす
+      case "$raw" in *'$'*) return 1 ;; esac
+      case "$flat" in *--force* | *--mirror* | *--delete* | *--no-verify* | *--prune* | *--all* | *--tags*) return 1 ;; esac
+      # -f/-d/-n を含む短縮オプション群、+refspec、:refspec（削除）、main/master 宛
+      # （HEAD:main / feat:refs/heads/main のように refspec の末尾が main/master の形も含む）
+      printf '%s\n' "$flat" | grep -Eq -- '(^|[[:space:]])-[A-Za-z]*[fdn][A-Za-z]*([[:space:]]|$)|(^|[[:space:]])\+[^[:space:]]|(^|[[:space:]]):[^[:space:]]|(^|[[:space:]:/])(main|master)([[:space:]]|$)' && return 1
+      local cwd branch
+      cwd=$(printf '%s' "$input" | jq -r '.cwd // ""')
+      if [ -n "$cwd" ]; then
+        branch=$(git -C "$cwd" symbolic-ref --short -q HEAD 2>/dev/null)
+        case "$branch" in main | master) return 1 ;; esac
+      fi
+      ;;
+    "git commit"*)
+      case "$flat" in *--no-verify* | *--amend*) return 1 ;; esac
+      printf '%s\n' "$flat" | grep -Eq -- '(^|[[:space:]])-[A-Za-z]*n[A-Za-z]*([[:space:]]|$)' && return 1
+      ;;
+    "gh pr create"*)
+      # 別リポジトリへの作成（-R / --repo）は /pr の対象外なので確認ダイアログに落とす
+      printf '%s\n' "$flat" | grep -Eq -- '(^|[[:space:]])(-R|--repo)([[:space:]=]|$)' && return 1
+      ;;
+  esac
+  return 0
+}
+
+# force push は /pr 中でも deny（Claude の ask も Grok の always-approve も通さない）
+is_force_push() {
+  local raw="$1" s
+  s=$(stripped_or_raw "$raw")
+  s=${s//\\$'\n'/ }
+  s=${s//$'\n'/;}
+  printf '%s\n' "$s" | grep -Eq -- '(^|[[:space:];&|(`])([^[:space:]]*/)?\\?git[[:space:]]+' || return 1
+  case "$s" in *"git push"* | *" push "*) ;; *)
+    printf '%s\n' "$s" | grep -Eq -- '(^|[[:space:];&|(`])([^[:space:]]*/)?\\?git[[:space:]]+((-[cC]|--git-dir|--work-tree|--namespace)[[:space:]]+[^[:space:]]+[[:space:]]+|--?[A-Za-z][^[:space:]]*[[:space:]]+)*push([[:space:];&|)<>]|$)' || return 1
+    ;;
+  esac
+  case "$s" in *--force* | *--force-with-lease*) return 0 ;; esac
+  local saw_push=0 t
+  for t in $s; do
+    [ "$t" = "push" ] && saw_push=1
+    if [ "$saw_push" -eq 1 ]; then
+      case "$t" in
+        -f|--force|--force-with-lease|--force=*|--force-with-lease=*) return 0 ;;
+        --*) ;;
+        -*) printf '%s' "$t" | grep -Eq -- '^-[A-Za-z]*f[A-Za-z]*$' && return 0 ;;
+      esac
+    fi
+  done
+  return 1
+}
+
+emit_pre_deny() {
+  jq -cn --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+}
+emit_pre_ask() {
+  jq -cn --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+}
+
+is_shell_tool() {
+  case "$1" in Bash|run_terminal_command) return 0 ;; *) return 1 ;; esac
+}
 
 case "$event" in
   UserPromptExpansion)
-    if [ "$is_pr" -eq 1 ]; then
+    cmd_name=$(printf '%s' "$input" | jq -r '.command_name // .commandName // empty')
+    if [ "$cmd_name" = "pr" ]; then
       touch "$flag"
     else
       rm -f "$flag"
     fi
     ;;
   UserPromptSubmit)
+    prompt=$(printf '%s' "$input" | jq -r '.prompt // .user_prompt // .userPrompt // empty')
+    subagent=$(printf '%s' "$input" | jq -r '.subagentType // .subagent_type // empty')
     # サブエージェントの submit で親のフラグを消さない
     if [ -n "$subagent" ] && [ "$subagent" != "null" ]; then
       exit 0
     fi
-    if [ "$is_pr" -eq 1 ]; then
+    # /pr の展開本文は SKILL.md の見出し（最初の "# " 行）で見分ける。見出しは SKILL.md から実行時に読むので
+    # 改名しても追従する。SKILL.md が読めなければ（= /pr 自体が存在しない）展開本文とは判定せずフラグを消す（fail-closed）
+    pr_h1=$(grep -m1 '^# ' "$(dirname "$SELF")/../skills/pr/SKILL.md" 2>/dev/null)
+    is_pr_prompt=0
+    case "$prompt" in
+      "/pr" | "/pr "* | "/pr"$'\n'*) is_pr_prompt=1 ;;
+      *'<!-- pr-mode-enable -->'*) is_pr_prompt=1 ;;
+      *) [ -n "$pr_h1" ] && [[ "$prompt" == *"$pr_h1"* ]] && is_pr_prompt=1 ;;
+    esac
+    if [ "$is_pr_prompt" -eq 1 ]; then
+      # Grok は Expansion が無いので Submit で立てる。Claude は Expansion が touch 済みでも冪等
       touch "$flag"
     elif [ -n "${GROK_HOOK_EVENT:-}" ]; then
-      # Grok は Expansion が無いので、ユーザー発話が /pr でなければ閉じる。
       # prompt が空の auto-wake では触らない
-      if [ -n "$prompt" ]; then
-        rm -f "$flag"
-      fi
-    elif [ -f "$flag" ]; then
-      now=$(date +%s)
-      mtime=$(stat -c %Y "$flag" 2>/dev/null || echo 0)
-      if [ $((now - mtime)) -gt 15 ]; then
-        rm -f "$flag"
-      fi
-    fi
-    ;;
-  PermissionRequest)
-    if [ -f "$flag" ]; then
-      if [ "$is_pr_auto_allow" -eq 1 ] && [ "$is_force_push" -eq 0 ] && [ "$is_composite" -eq 0 ]; then
-        echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
-      fi
-    elif [ "$is_pr_auto_allow" -eq 1 ]; then
-      echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"コミット・push・PR作成はユーザーが /pr を実行しているターンでのみ許可されます。ユーザーに /pr の実行を依頼してください。"}}}'
+      [ -n "$prompt" ] && rm -f "$flag"
+    else
+      rm -f "$flag"
     fi
     ;;
   PreToolUse)
-    if [ "$is_flag_tamper" -eq 1 ]; then
-      echo "$deny_flag"
-    elif [ "$is_force_push" -eq 1 ]; then
-      # force push は Claude の ask 許可でも通さない
-      echo "$deny_force"
-    elif [ -n "${GROK_HOOK_EVENT:-}" ]; then
-      # git commit / push / PR 作成の deny は Grok（always-approve でも止まる）。
-      # Claude は PermissionRequest で ask を代替する
-      if [ "$is_guarded_git" -eq 1 ] && [ ! -f "$flag" ]; then
-        echo "$deny_msg"
+    tool=$(printf '%s' "$input" | jq -r '.tool_name // .toolName // empty')
+    is_shell_tool "$tool" || exit 0
+    cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // .toolInput.command // empty')
+    [ -n "$cmd" ] || exit 0
+    # フラグはフックだけが作る。エージェントが touch / リダイレクトで迂回するのを止める。
+    # git commit / gh pr create の本文にフラグ名が出るだけでは deny しない
+    case "$cmd" in
+      *claude-pr-mode-*)
+        case "$cmd" in
+          *"git commit"*|*"git push"*|*"gh pr create"*|*"gh pr merge"*) ;;
+          *)
+            emit_pre_deny 'pr-mode フラグはフック以外が作成・変更してはならない'
+            exit 0
+            ;;
+        esac
+        ;;
+    esac
+    if is_force_push "$cmd"; then
+      emit_pre_deny 'force push は禁止されています'
+      exit 0
+    fi
+    if [ -f "$flag" ]; then
+      # /pr 中: 自動承認条件を満たすものだけ素通し。満たさない git 書き込みは
+      # Claude は PermissionRequest に委ね、Grok（PermissionRequest 無し）は ask
+      if [ -n "${GROK_HOOK_EVENT:-}" ] && is_git_write "$cmd" "$(stripped_or_raw "$cmd")" && ! is_auto_approvable "$cmd"; then
+        emit_pre_ask 'この git 操作は /pr の自動許可対象外です。force・amend・デフォルトブランチ宛・複合コマンドではないか確認してください'
       fi
+      exit 0
+    fi
+    if is_git_write "$cmd" "$(stripped_or_raw "$cmd")"; then
+      emit_pre_deny 'コミット・push・PR作成はユーザーが /pr を実行しているターンでのみ許可されます。自分では実行せず、ユーザーに /pr の実行を依頼してください。'
+    fi
+    ;;
+  PermissionRequest)
+    tool=$(printf '%s' "$input" | jq -r '.tool_name // .toolName // empty')
+    is_shell_tool "$tool" || exit 0
+    cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // .toolInput.command // empty')
+    if [ -f "$flag" ]; then
+      if is_auto_approvable "$cmd"; then
+        jq -cn '{hookSpecificOutput:{hookEventName:"PermissionRequest",decision:{behavior:"allow"}}}'
+      fi
+    elif is_git_write "$cmd" "$(stripped_or_raw "$cmd")"; then
+      # 通常は PreToolUse で止まる。PreToolUse が無効な環境向けの二重化
+      jq -cn '{hookSpecificOutput:{hookEventName:"PermissionRequest",decision:{behavior:"deny",message:"コミット・push・PR作成はユーザーが /pr を実行しているターンでのみ許可されます。ユーザーに /pr の実行を依頼してください。"}}}'
     fi
     ;;
   Stop)
