@@ -27,7 +27,7 @@ dotfiles/
 ├── nix/
 │   ├── README.md          # Nix運用の詳細ドキュメント
 │   ├── packages.nix       # CLIツール（git・gh・vim・Node.js等。Nixで管理）
-│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ）
+│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ、作業ディレクトリ作成（`.claude/dev-roots` から導出））
 │   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え・キーリピート delay=250ms・TUI向け embed-preedit-text=false）
 │   └── desktop.nix        # GNOMEデスクトップ設定（テーマ・電源・キーバインド・Dock・ウィンドウボタン左上。VSCode側は vscode/）
 ├── git/
@@ -67,19 +67,24 @@ dotfiles/
 │   ├── README.md         # iPhone側の接続手順とUbuntu側の残作業
 │   └── setup.sh          # OpenSSH / Tailscale を冪等に導入（bootstrap と home-manager switch から実行）
 └── .claude/
-    ├── CLAUDE.md          # 全プロジェクト向けグローバル指示（言語・Git・Nix・検証）。プロジェクト固有は書かない
+    ├── CLAUDE.md          # 全プロジェクト向けグローバル指示（言語・Git・Nix・検証・破壊的操作）。プロジェクト固有は書かない
     ├── rules/orchestration.md # Claude Code 専用のモデル振り分け（Grok は読まない）
     ├── settings.json      # フック・permissions・languageなどの設定
-    ├── setup.sh           # .claude/ 配下を ~/.claude へシンボリックリンク
+    ├── setup.sh           # .claude/ 配下（gitが管理するファイル）を ~/.claude へシンボリックリンク
+    ├── dev-roots          # 削除・作業ディレクトリ作成の許可ルートの唯一の定義
     ├── claude-notify.example.json # iPhoneプッシュ通知設定のテンプレート（~/.claude/claude-notify.json へコピー）
     ├── hooks/
-    │   ├── notify.sh      # Stop/Notification時にiPhoneへWeb Push通知
-    │   └── pr-mode.sh     # /pr 実行中だけgit操作を自動許可
+    │   ├── notify.sh                 # Stop/Notification時にiPhoneへWeb Push通知
+    │   ├── pr-mode.sh                # /pr 実行中だけgit操作を自動許可、それ以外は拒否
+    │   ├── guard-destructive.sh      # 回復不能な操作（rm -rf・破壊的git操作等）を止める
+    │   ├── validate-claude-config.sh # 設定ファイル編集直後の構文検証
+    │   └── lib/strip-shell.awk       # 引用符・HEREDOC除去の共通ライブラリ
     ├── skills/
     │   ├── pr/SKILL.md            # /pr スキル
     │   ├── readme/SKILL.md        # /readme スキル
     │   ├── clean-branches/SKILL.md # /clean-branches スキル
     │   └── nix-setup/SKILL.md     # /nix-setup スキル
+    ├── tests/             # フックのテーブル駆動テスト（run.shで一括実行。~/.claude へは配布しない）
     └── README.md
 ```
 
@@ -100,7 +105,7 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 ```zsh
 bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ```
-`.claude/`配下の全ファイルが`~/.claude`へシンボリックリンクされる（`home-manager switch`時にはactivationからも自動実行される）。
+`.claude/`配下のうちgitが管理するファイル（`setup.sh`・`README.md`・`tests/` 等の除外分を除く）が`~/.claude`へシンボリックリンクされる（`home-manager switch`時にはactivationからも自動実行される）。
 
 ### zsh設定の反映
 ```zsh
@@ -127,7 +132,10 @@ nix flake update
 - `/nix-setup`：新規プロジェクトの開発環境をNixのdevShell + direnvでセットアップする
 
 ### セットアップスクリプト
-- `bash .claude/setup.sh`：`.claude/`配下を`~/.claude`へシンボリックリンク
+- `bash .claude/setup.sh`：`.claude/`配下（gitが管理するファイルのみ）を`~/.claude`へシンボリックリンク
+- `bash .claude/tests/run.sh`：`.claude/`の構文チェックとフック（pr-mode・guard-destructive・validate-claude-config）のテーブル駆動テスト。`.claude/hooks/`を変更したら必ず通す
+- `nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath`：`flake.nix` / `nix/`の評価エラーと`git add`漏れを検出（`switch`の前に流す）
+- `.claude/dev-roots`（削除・作業ディレクトリの許可ルート。1行1パス・`~/`始まり・`#`から行末はコメント）を変更したときは、`git add .claude/dev-roots`のうえで上記を実行し、`bash .claude/setup.sh`も再実行する
 - `bash vscode/install-extensions.sh`：`vscode/extensions.txt`の拡張機能をVSCode/Cursorへ導入（`home-manager switch`時にも自動実行される。冪等）
 - OpenSSH / Tailscale：`bootstrap.sh` と `home-manager switch` の両方で `ssh-tailscale/setup.sh` が自動実行される（ログインだけ `sudo tailscale up` が手動。iPhone側は [ssh-tailscale/README.md](/ssh-tailscale/README.md)）
 

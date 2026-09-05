@@ -2,7 +2,7 @@
 
 ルート README のコマンド節からの個人用早見表。詳細・設計理由は各ディレクトリの README を見る。
 
-## Claude Code
+## Claude Code / Grok
 
 ### Skills
 ```
@@ -10,6 +10,13 @@
 /readme
 /clean-branches
 /nix-setup
+```
+
+### 設定の配布・検証
+```zsh
+bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh      # .claude/ を ~/.claude へリンク（ファイル追加後に再実行）
+bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/tests/run.sh  # 構文チェック＋フックのテスト
+nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath
 ```
 
 ## Github Workflow

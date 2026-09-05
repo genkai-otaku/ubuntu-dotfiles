@@ -11,7 +11,7 @@ Grok CLI（xAI）の設定実体。適用は [nix/home.nix](../nix/home.nix) が
 
 ## AGENTS.md に書くこと / 書かないこと
 
-言語・Git・Nix・検証などの共通ルールは、Claude互換モードが読む `~/.claude/CLAUDE.md` に任せる。同じ内容をここに複製しない。書くのは `spawn_subagent` の使い分けと、Claude のモデル名を使わないこと。Claude 専用のモデル振り分けは `~/.claude/rules/` にあり、`config.toml` の `compat.claude.rules = false` で Grok は読まない。
+言語・Git・Nix・検証・破壊的操作の許可ルートなどの共通ルールは、Claude互換モードが読む `~/.claude/CLAUDE.md` に任せる。同じ内容をここに複製しない。書くのは `spawn_subagent` の使い分け、Claude のモデル名を使わないこと、always-approve でも hook の ask / deny が効くこと。Claude 専用のモデル振り分けは `~/.claude/rules/` にあり、`config.toml` の `compat.claude.rules = false` で Grok は読まない。
 
 ## 管理対象外
 
@@ -23,7 +23,13 @@ Grok CLI（xAI）の設定実体。適用は [nix/home.nix](../nix/home.nix) が
 
 ## 権限モードと `/pr` フロー
 
-`config.toml` の `permission_mode = "always-approve"` は確認ダイアログを出さない設定。その代わり `pr-mode.sh` の `PreToolUse` が、`/pr` 中以外の `git commit` / `git push` / `gh pr create` / `gh pr merge` を deny する。`/pr` の検出は `UserPromptSubmit`（先頭 `/pr`、または番兵 `<!-- pr-mode-enable -->`）。stdin は camelCase、イベント名は `GROK_HOOK_EVENT`。
+`config.toml` の `permission_mode = "always-approve"` は通常の確認ダイアログを出さない設定。その代わり:
+
+- `pr-mode.sh` の `PreToolUse` が、`/pr` 中以外の `git commit` / `git push` / `gh pr create` を deny する。force push は `/pr` 中でも deny。自動許可対象外の git 書き込みは ask（always-approve でも確認になる）
+- `guard-destructive.sh` が致命的な削除を deny し、解釈できない削除は ask
+- `settings.json` のシェル `ask` / `deny` ルールは always-approve でも効く（`gh pr merge`・`sudo`・グローバル install など）
+
+`/pr` の検出は `UserPromptSubmit`（先頭 `/pr`、番兵 `<!-- pr-mode-enable -->`、または `skills/pr/SKILL.md` の H1）。stdin は camelCase、イベント名は `GROK_HOOK_EVENT`、ツール名は `run_terminal_command`（matcher `Bash` のエイリアスでも当たる）。
 
 ## VSCode 統合ターミナルの日本語IME
 

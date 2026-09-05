@@ -4,11 +4,11 @@
 
 ## リポジトリの性質
 
-Ubuntu用の個人dotfiles。ビルド・lint・テストは無い。管理対象：
+Ubuntu用の個人dotfiles。ビルド・lint は無く、テストは `.claude/tests/run.sh`（フックのテーブル駆動テスト）だけがある。管理対象：
 
 - `flake.nix` + `nix/` — home-manager standalone（CLI と GNOME dconf）。`keyboard.nix` の ibus `embed-preedit-text = false` は戻さない。`bootstrap.sh` が新マシンの1コマンドセットアップ
 - `vscode/` — VSCode / Cursor 共通設定。書き込み可能リンク（詳細 `vscode/README.md`）
-- `.claude/` — Claude Code の**グローバル**設定実体。全プロジェクトの毎セッションに載るので、プロジェクト固有は書かない
+- `.claude/` — Claude Code / Grok の**グローバル**設定実体（settings.json・CLAUDE.md・hooks・skills・dev-roots・tests。一覧は `.claude/README.md`）。全プロジェクトの毎セッションに載るので、プロジェクト固有は書かない
 - `git/` — gitconfig 実体（`user.name` / `user.email` は `~/.gitconfig.local`）
 - `grok/` — Grok CLI 設定実体。共通ルールは `.claude/CLAUDE.md`。本体は bootstrap
 - `zsh/` — Oh My Zsh + Powerlevel10k（本体は bootstrap。Nix 管理外）。SSH時は tmux へ attach
@@ -34,14 +34,17 @@ Ubuntu用の個人dotfiles。ビルド・lint・テストは無い。管理対�
 
 ## やってはいけないこと
 
-- `.claude/` の処理を home-manager 標準管理へ移行する — `setup.sh` のセルフヒーリング（Issue #40857）は再現できない
+- `.claude/` の処理を home-manager 標準管理へ移行する — `setup.sh` のセルフヒーリング（リンクが実体化したとき、実体がリポジトリより新しければ内容をリポジトリへ取り込み、古ければ `~/.claude/.setup-backups/` へ退避してからリンクを張り直す。Issue #40857）は再現できない
 - `editorUserFiles` の `force = true` を外す
 - `username` ハードコードを動的取得にする — flake は環境変数を読めない
 - direnv フックを `enableZshIntegration` に置き換える — `~/.zshrc` は mkOutOfStoreSymlink
 - `claude-code` / Grok CLI を Nix 管理に入れる
 - `home-manager switch` を実行する — 検証後にユーザーへ依頼
 - `~/.claude/claude-notify.json` を読む・コミットする
-- /pr 四層のうち一層だけ変える
+- /pr 四層のうち一層だけ変える — 整合が壊れる
+- `.claude/hooks/` のうちテスト対象の3本（pr-mode.sh・guard-destructive.sh・validate-claude-config.sh）や `lib/strip-shell.awk`（2フックが共有）をテストを通さずに変更する — 正規表現ベースの判定は際どいケースが多く、退行は `bash .claude/tests/run.sh` でしか検出できない
+- `guard-destructive.sh` に「この書き方も拒否する」正規表現を足して穴を塞ぎ続ける — 契約（フック冒頭の一文）が壊れる。解釈できない書き方は deny ではなく**説明つき ask** に倒す設計で、新しい書き方が見つかったら「解釈不能に分類されて ask になるか」を確認するだけにする
+- 許可ルート（削除できるディレクトリ）を `guard-destructive.sh` や `nix/home.nix` に直接書く — 定義は `.claude/dev-roots` 1か所だけ
 - `embed-preedit-text` を `true` に戻す
 - `window.titleBarStyle` / `menuStyle` / `menuBarVisibility` を片方だけ変える
 - `grok/AGENTS.md` に共通ルールを重複させる
@@ -52,15 +55,20 @@ Ubuntu用の個人dotfiles。ビルド・lint・テストは無い。管理対�
 
 - 構成名は `ubuntu` 固定。`--flake <リポジトリ>#ubuntu`
 - flake は git 追跡ファイルだけ認識する。`.nix` 追加は `git add`。`vscode/` は例外だが配るには push
-- `.claude/` の追加・削除は `bash .claude/setup.sh`（switch 時にも実行）
+- `.claude/` の追加・削除は `bash .claude/setup.sh`（switch 時にも実行）。`setup.sh` は git が管理するファイルだけを配布する。`.claude/tests/` はリンク対象外
+- **削除の許可ルートの定義は `.claude/dev-roots` だけ**（1行1パス、`~/` 始まり、`#` から行末はコメント、前後の空白と末尾の `/` は無視。読む側3つは同じ読み方をする。現在 `~/Dev/kaishi`・`~/Dev/seino914`・`~/Dev/hobby`）。読む側は `guard-destructive.sh`・`nix/home.nix`（`devDirs`）・`tests/test-guard-destructive.sh`。変更したら **`git add .claude/dev-roots`** と **`nix eval`**、`bash .claude/tests/run.sh`、`bash .claude/setup.sh` を通す
+- `docs/` は `.gitignore` 対象の手元資料置き場
 - コマンドは `README.md`
 
 ## 変更後の検証（switch はしない）
 
 ```zsh
+# flake.nix / nix/ を変更したとき（評価エラー・未 git add を検出）
 nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath
-jq empty .claude/settings.json
-bash -n <スクリプト>
+# .claude/ 配下（settings.json・hooks/・skills/・dev-roots・setup.sh）や bootstrap.sh を変更したとき
+# （JSON・シェル構文・awk 構文・SKILL.md frontmatter のチェック＋フックのテーブル駆動テスト）
+bash .claude/tests/run.sh
+# run.sh が使えない場合の個別実行: jq empty .claude/settings.json / bash -n <スクリプト>
 ```
 
 `nix eval` は評価まで。activation 失敗は switch でしか分からないので、その旨を添えて依頼する。
@@ -72,7 +80,9 @@ bash -n <スクリプト>
 3. `settings.json` の `permissions.ask`
 4. `hooks/pr-mode.sh`（Claude は PermissionRequest で許可/拒否。Grok は PreToolUse で deny。`gh pr merge` は ask）
 
-実装制約は `pr-mode.sh` 先頭コメント。
+層4の `UserPromptSubmit` は、`/pr` の展開本文かどうかを `skills/pr/SKILL.md` の最初の `# ` 見出し（Grok は番兵 `<!-- pr-mode-enable -->` も）で見分ける。H1 を無くすと判定できなくなる。
+
+実装制約は `pr-mode.sh` 先頭コメントと `.claude/README.md`。
 
 ## claude-notify
 
