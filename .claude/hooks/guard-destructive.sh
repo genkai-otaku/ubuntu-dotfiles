@@ -114,7 +114,7 @@ fatal_deny() {
     && deny "ルート / ホーム直下の削除は禁止です"
   printf '%s' "$p" | grep -Eq -- "${SEP}(sudo[[:space:]]+)?([^[:space:]]*/)?(rm|mv)[[:space:]]+(-[A-Za-z]+[[:space:]]+)*[\"']?(${HOME_RE}/\.claude|[^[:space:]]*dotfiles/\.claude)/?\*?[\"']?([[:space:];&|]|$)" \
     && deny "~/.claude（Claude Code のグローバル設定）の削除・移動は禁止です"
-  # .claude 配下の設定実体（hooks / skills / agents / settings.json / CLAUDE.md）の再帰削除・移動
+  # .claude 配下の設定実体（hooks / skills / agents / settings.json / global-instructions.md）の再帰削除・移動
   # （dotfiles 側は許可ルートの内側なので範囲判定では止まらない。単一ファイルの rm は開発中の整理として許す）
   printf '%s' "$p" | grep -Eq -- "${SEP}(sudo[[:space:]]+)?([^[:space:]]*/)?(rm[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-[A-Za-z]*[rR][A-Za-z]*[[:space:]]+(-[A-Za-z]+[[:space:]]+)*|mv[[:space:]]+(-[A-Za-z]+[[:space:]]+)*)[\"']?(${HOME_RE}/\.claude|[^[:space:]]*dotfiles/\.claude)/${CLAUDE_CORE}([/[:space:]\"';&|]|$)" \
     && deny "~/.claude / dotfiles/.claude の設定実体（hooks・skills 等）の再帰削除・移動は禁止です"
@@ -252,10 +252,10 @@ check_one_target() {
   local r="$1" rec="$2" mode n
   mode="dir"; case "$r" in A:*) mode="dotglob"; r=${r#A:} ;; G:*) mode="glob"; r=${r#G:} ;; esac
   is_allowed_path "$r" || deny "削除は ${ROOTS_DISP} と一時領域の配下でのみ許可されています（対象: ${r}）"
-  # settings.json / CLAUDE.md はハーネスそのもの（消えると全プロジェクトの permissions・hooks が失われる）なので単一ファイルでも止める
+  # settings.json / global-instructions.md と ~/.claude/CLAUDE.md はハーネスそのもの（消えると全プロジェクトの permissions・共通指示が失われる）なので単一ファイルでも止める
   case "$r" in
-    */dotfiles/.claude/settings.json | */dotfiles/.claude/CLAUDE.md)
-      deny "dotfiles/.claude の settings.json・CLAUDE.md（~/.claude のリンク先）の削除は禁止です（対象: ${r}）" ;;
+    */dotfiles/.claude/settings.json | */dotfiles/.claude/global-instructions.md | "$HOME/.claude/CLAUDE.md")
+      deny "dotfiles/.claude の settings.json・global-instructions.md（~/.claude のリンク先）の削除は禁止です（対象: ${r}）" ;;
   esac
   # dotfiles/.claude 配下の設定実体は許可ルートの内側だが、再帰削除・glob 削除は止める（相対パス指定もここで捕捉する）
   if [ "$rec" -eq 1 ] || [ "$mode" != "dir" ]; then
@@ -266,7 +266,7 @@ check_one_target() {
     case "$mode:$r" in
       dir:*/dotfiles | dotglob:*/dotfiles) deny "dotfiles リポジトリ自体（~/.claude の実体を含む）の削除は禁止です（対象: ${r}）" ;;
     esac
-    for n in hooks skills agents settings.json CLAUDE.md; do
+    for n in hooks skills agents settings.json global-instructions.md CLAUDE.md; do
       case "$r" in
         "$HOME/.claude/$n" | "$HOME/.claude/$n"/* | */dotfiles/.claude/$n | */dotfiles/.claude/$n/*)
           deny "~/.claude / dotfiles/.claude の設定実体（hooks・skills 等）の再帰削除は禁止です（対象: ${r}）" ;;
@@ -307,8 +307,8 @@ check_one_mv_source() {
   local r="$1" g n
   g=dir; case "$r" in A:*) g=dotglob; r=${r#A:} ;; G:*) g=glob; r=${r#G:} ;; esac
   case "$g:$r" in
-    *:"$HOME/.claude" | *:*/dotfiles/.claude | *:*/dotfiles/.claude/settings.json | *:*/dotfiles/.claude/CLAUDE.md | dir:*/dotfiles | dotglob:*/dotfiles)
-      deny "~/.claude / dotfiles（および .claude の settings.json・CLAUDE.md）の移動は禁止です（対象: ${r}）" ;;
+    *:"$HOME/.claude" | *:"$HOME/.claude/CLAUDE.md" | *:*/dotfiles/.claude | *:*/dotfiles/.claude/settings.json | *:*/dotfiles/.claude/global-instructions.md | *:*/dotfiles/.claude/CLAUDE.md | dir:*/dotfiles | dotglob:*/dotfiles)
+      deny "~/.claude / dotfiles（および .claude の settings.json・global-instructions.md）の移動は禁止です（対象: ${r}）" ;;
     glob:"$HOME" | dotglob:"$HOME") deny "ホーム直下の一括移動は禁止です（対象: $r/*）" ;;
   esac
   for n in hooks skills agents; do
