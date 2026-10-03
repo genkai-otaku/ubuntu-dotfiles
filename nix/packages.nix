@@ -17,9 +17,9 @@
     docker # dockerクライアントCLI（Docker Engine本体はaptで導入する。nix/README.md参照）
     docker-compose
     supabase-cli
-    # 注: Claude Code CLIは意図的にNix管理外。
-    # 常に最新版を使うため、公式ネイティブインストーラー（自動更新あり）で
-    # 導入する（bootstrap.sh が担当）
+    # 注: Claude Code / Grok / OpenCode CLIは意図的にNix管理外。
+    # 各公式インストーラーで導入する（Claude Code / Grok は自動更新、
+    # OpenCode は公式配布バイナリ。bootstrap.sh が担当）
 
     # ユーティリティ
     jq

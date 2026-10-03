@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # Claude Code 設定ファイルのセットアップスクリプト
-# dotfiles/.claude/ 配下のファイルを $HOME/.claude に同じディレクトリ構成で
-# シンボリックリンクします。ファイルを追加したら再実行するだけで反映されます
+# dotfiles/.claude/ 配下のファイルを $HOME/.claude にシンボリックリンクします。
+# global-instructions.md は自動検出によるプロジェクト指示との二重読込を避けるため、
+# ~/.claude/CLAUDE.md として公開します。ファイルを追加したら再実行するだけで反映されます
 # （home-manager switch 時にも activation から自動実行されます）。
 #
 # 方針:
@@ -94,7 +95,11 @@ echo "Claude Code 設定ファイルのセットアップを開始します..."
 while IFS= read -r -d '' src; do
   rel="${src#$SCRIPT_DIR/}"
   is_excluded "$rel" && continue
-  dest="$CLAUDE_DIR/$rel"
+  if [ "$rel" = "global-instructions.md" ]; then
+    dest="$CLAUDE_DIR/CLAUDE.md"
+  else
+    dest="$CLAUDE_DIR/$rel"
+  fi
   mkdir -p "$(dirname "$dest")" || { failed="$failed $rel"; continue; }
   link_file "$src" "$dest" || failed="$failed $rel"
 done < <(list_sources)

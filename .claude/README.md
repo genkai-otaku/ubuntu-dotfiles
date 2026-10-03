@@ -2,14 +2,14 @@
 
 ## 概要
 
-`~/.claude` の実体。ここを編集するとコミット前でも全プロジェクトの Claude Code / Grok に即反映される（構成と注意点はリポジトリ直下の `CLAUDE.md` を参照）。Grok は `compat.claude.hooks`（デフォルト有効）で同じ `settings.json` の hooks を読む。
+`~/.claude` の実体。ここを編集するとコミット前でも全プロジェクトの Claude Code / Grok に即反映される（構成と注意点はリポジトリ直下の `AGENTS.md` を参照）。Grok は `compat.claude.hooks`（デフォルト有効）で同じ `settings.json` の hooks を読む。
 
 ## ファイル構成
 
 | ファイル | 役割 |
 | :--- | :--- |
 | `settings.json` | Claude Code の設定（フック・言語・effortLevel・permissions など） |
-| `CLAUDE.md` | グローバル指示の実体（言語・Git操作の制限・変更後の検証・秘密情報・パッケージインストールの制限・サブエージェント）。Claude / Grok 共通。プロジェクト固有は書かない |
+| `global-instructions.md` | グローバル指示の実体（言語・Git操作の制限・変更後の検証・秘密情報・パッケージインストールの制限・サブエージェント）。setup.sh が `~/.claude/CLAUDE.md` にリンクする。Claude / Grok 共通で、リポジトリ内のプロジェクト指示として二重検出されない |
 | `rules/orchestration.md` | Claude Code 専用のモデル振り分け。Grok は `compat.claude.rules = false` で読まない |
 | `hooks/notify.sh` | Stop / Notification 時に iPhone へプッシュ通知するフック（送信本体は `claude-notify/send-push.mjs`）。Claude / Grok |
 | `hooks/pr-mode.sh` | `/pr` 実行中だけ git commit / push / PR作成を自動許可し、それ以外は実行前に拒否するフック（Claude / Grok） |
@@ -21,9 +21,10 @@
 | `skills/pr/SKILL.md` | `/pr` スキル：変更をコミット・pushしてGitHubにPRを作成。`disable-model-invocation: true` でユーザー起動限定 |
 | `skills/clean-branches/SKILL.md` | `/clean-branches` スキル：ローカルブランチのうちデフォルトブランチ・使用中のブランチ以外を削除して整理（未マージは確認後のみ） |
 | `skills/nix-setup/SKILL.md` | `/nix-setup` スキル：新規プロジェクトの開発環境をNix devShell + direnvでセットアップ |
+| `skills/git-pull/SKILL.md` | `/git-pull` スキル：直下の各リポジトリを `main` に切り替えてfast-forward-onlyでpull（変更があるリポジトリはスキップ） |
 | `claude-notify.example.json` | iPhoneプッシュ通知（claude-notify）設定のテンプレート |
 | `setup.sh` | `.claude/` 配下（gitが管理するファイルのみ）を `~/.claude` へシンボリックリンクするスクリプト |
-| `tests/` | フックのテーブル駆動テスト（pr-mode / guard-destructive / validate-claude-config / Grok 互換）と一括実行スクリプト `run.sh`（配布対象外。`bash .claude/tests/run.sh`） |
+| `tests/` | git-pull の一時リポジトリ統合テストとフックのテーブル駆動テスト（pr-mode / guard-destructive / validate-claude-config / Grok 互換）。一括実行は `bash .claude/tests/run.sh`（配布対象外） |
 
 ## セットアップ（反映方法）
 
@@ -31,7 +32,7 @@
 bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ```
 
-`.claude/` 配下でgitが認識しているファイル（追跡済み＋未追跡かつ`.gitignore`対象外。gitが使えない環境では`find`にフォールバックし、除外リストだけで秘密ファイル等を守る）が、同じディレクトリ構成のまま `~/.claude` へシンボリックリンクされる。以後はこのリポジトリを編集するだけで全プロジェクトに即反映される（コピー作業は不要）。
+`.claude/` 配下でgitが認識しているファイル（追跡済み＋未追跡かつ`.gitignore`対象外。gitが使えない環境では`find`にフォールバックし、除外リストだけで秘密ファイル等を守る）が `~/.claude` へシンボリックリンクされる。通常は同じディレクトリ構成だが、`global-instructions.md` だけは `~/.claude/CLAUDE.md` にリンクして、Grokがこれをプロジェクトルールとして再読込するのを防ぐ。以後はこのリポジトリを編集するだけで全プロジェクトに即反映される（コピー作業は不要）。
 
 - **ファイルを追加したら再実行するだけ**でリンクされる（スクリプトの修正は不要）
 - `skills/` や `commands/` などのディレクトリを作れば、そのまま `~/.claude` 配下に反映され、Claude / Grok で使える
@@ -67,7 +68,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ユーザーが `/pr` と打つまで、Claude / Grok はコミット・push・PR作成を行わない。自然言語の「PRを出して」では起動しない。`/pr` 実行中は確認なしで一気にPR作成まで進む。
 
 - `skills/pr/SKILL.md` の `disable-model-invocation: true`：`/pr` はユーザー起動限定で、Claude がスキルを自動起動すること自体を機構的に禁止
-- `CLAUDE.md`：`/pr` の指示があるまで `git commit` / `git push` / `gh pr create` を実行しないよう指示（Claude が試みること自体を抑止）
+- `global-instructions.md`：`/pr` の指示があるまで `git commit` / `git push` / `gh pr create` を実行しないよう指示（Claude が試みること自体を抑止）
 - `settings.json` の `permissions.ask`：万一実行しようとしても必ず確認ダイアログが出る強制レイヤー
 - `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを自動許可する。判定は `PreToolUse`(Bash) の deny と `PermissionRequest`(Bash) の allow の二段構え
   - `UserPromptExpansion`：スラッシュコマンド展開時、コマンド名が `pr` ならフラグ作成、別コマンドなら削除
@@ -97,7 +98,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 
 判定は 4 段構造で、上から順に評価して最初に決まった deny で終了する。ask は保留して最後に 1 つだけ出す（`killall …; rm -rf ~/Documents` のように ask 対象と deny 対象が混ざったコマンドが ask へ格下げされないように）：
 
-1. **致命 deny**（生文字列で判定するので引用符の中でも止まる。`eval` / `sh -c` / `… | sh` / `bash <<EOF` のようにシェルへ文字列を渡す形では、その文字列を bash が実行するので元のコマンド文字列全体にも同じ判定を掛ける。`bash -c "rm -rf ~"` は deny）：ルート・ホーム直下の `rm`、`~/.claude` および dotfiles の `.claude` を対象にした `rm` / `mv`（`settings.json`・`CLAUDE.md` は単一ファイルの `rm` でも止める）、`.claude` 配下の設定実体（`hooks` / `skills` / `agents` 等）の再帰削除・移動、`curl|sh` 等のリモートスクリプトのパイプ実行（多段パイプ・`bash <(curl …)`・`sh -c "$(curl …)"`・`eval "$(curl …)"`・`source <(curl …)` / `. <(curl …)` の形も含む）、ディスク操作（`diskutil erase` / `apfs delete`・`dd of=/dev/`・`mkfs` 等）
+1. **致命 deny**（生文字列で判定するので引用符の中でも止まる。`eval` / `sh -c` / `… | sh` / `bash <<EOF` のようにシェルへ文字列を渡す形では、その文字列を bash が実行するので元のコマンド文字列全体にも同じ判定を掛ける。`bash -c "rm -rf ~"` は deny）：ルート・ホーム直下の `rm`、`~/.claude` および dotfiles の `.claude` を対象にした `rm` / `mv`（`settings.json`・`global-instructions.md`・`~/.claude/CLAUDE.md` は単一ファイルの `rm` でも止める）、`.claude` 配下の設定実体（`hooks` / `skills` / `agents` 等）の再帰削除・移動、`curl|sh` 等のリモートスクリプトのパイプ実行（多段パイプ・`bash <(curl …)`・`sh -c "$(curl …)"`・`eval "$(curl …)"`・`source <(curl …)` / `. <(curl …)` の形も含む）、ディスク操作（`diskutil erase` / `apfs delete`・`dd of=/dev/`・`mkfs` 等）
 2. **削除の範囲判定**（`rm` / `rmdir` / `unlink` / `find -delete` / `mv`。`\rm` / `/bin/rm` の表記も含む）：対象を 1 つずつ絶対パスへ解決し、`dev-roots` の各ルートと一時領域（`$TMPDIR`・`/tmp/claude-*`。`TMPDIR` 未設定時は `/tmp` 全体ではなく `/tmp/claude-*` だけ）の**内側**なら確認なしで通す。解決できて外側（`~/Dev` 直下・ホーム・その上・許可ルートそのもの）なら **deny**。解決できない書き方は理由を添えた **ask**。加えて dotfiles リポジトリ自体・`.claude` の設定実体・作業中ディレクトリ自身やその親の再帰削除は deny。相対パスは hook 入力の `cwd` 基準で解決し、glob は手前のディレクトリで判定する。カンマ区切りのブレース展開（`{dist,build}`）は bash と同じ順に展開して各パスを判定する（展開後に外へ出る `{dist,../../../Documents}` は deny）
 3. **削除語を含むが構造を解釈できない形** → **ask**：`eval` / `sh -c` / `… | sh` / `bash <<EOF` / `xargs` 経由、引用符や HEREDOC が閉じていない書き方
 4. **git / kill / chmod の ask**（必ず確認ダイアログ。auto modeでも省略されない）：作業ツリー・履歴を壊す git 操作（`reset --hard` / `clean -f` / `checkout`・`switch`・`restore` での全変更破棄（`.` 対象、`-f` / `--force` / `--discard-changes`。`restore --staged .` は index だけなので対象外）/ `branch -D` / `stash drop`・`clear` / rebase（`--continue` / `--abort` 等の進行操作は対象外）/ `pull --rebase` / `commit --amend` / `filter-branch` / `reflog expire`・`update-ref -d` / `worktree remove --force`。`git checkout -b feat/add-config` のようなブランチ名は force 系と誤認しない）、`killall` / `pkill` / `kill <sig> -1`、絶対パスへの再帰 `chmod` / `chown`、リポジトリの `.git` の `rm`
@@ -146,10 +147,11 @@ settings.json の JSON 構文、シェルスクリプト全体の `bash -n`、`h
 
 **Grok CLI でも同じ通知が届く**。notify.sh が `GROK_HOOK_EVENT` で呼び出し元を判別し、応答完了（`reason == "end_turn"` の Stop）と許可待ち（`notificationType == "permission_prompt"` の Notification）だけをタイトル「(Grok)」付きで通知する。
 
+**OpenCode V2 でもタスク完了時に同じ通知が届く**。`opencode/plugins/mobile-notify.js` が`session.execution.succeeded`の`data.sessionID`を使って親セッションの正常完了だけを通知する。Claude/Grokと同じ設定・送信スクリプトを使うため、既に通知を設定済みなら追加作業は不要。プラグインはhome-managerで`~/.config/opencode/plugins/`へリンクされる。
+
 新しい PC で使うには（`home-manager switch` 実行後）:
 
 1. `claude-notify.example.json` を `~/.claude/claude-notify.json` にコピーし、VAPID 鍵と購読情報を記入する（値は既存 PC の `~/.claude/claude-notify.json` からコピーすればよい。iPhone 側の再設定は不要）。**新 PC で必要な手動作業はこれだけ**（送信スクリプトも依存も dotfiles 側で揃う）
 2. 疎通テスト: `node ~/Dev/kaishi/ubuntu-dotfiles/claude-notify/send-push.mjs --title "テスト" --body "OK" --event Stop`
 
 **注意**: 記入済みの `~/.claude/claude-notify.json` は VAPID 秘密鍵を含むため、このリポジトリ（PUBLIC）には絶対にコミットしないこと（`settings.json` の `permissions.deny` で Claude 自身の読み取りも禁止済み）。実行ログは `~/.claude/claude-notify.log` に追記される（1MB を超えると次回送信時に切り詰め）。
-
