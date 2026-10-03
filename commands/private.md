@@ -10,6 +10,23 @@
 /readme
 /clean-branches
 /nix-setup
+/git-pull
+```
+
+## OpenCode
+
+```text
+/pr
+/readme
+/clean-branches
+/nix-setup
+/git-pull
+```
+
+OpenCodeのグローバル設定は [`opencode/README.md`](../opencode/README.md)。設定リンクは `home-manager switch`、CLIは次のコマンドで導入する：
+
+```zsh
+bash ~/Dev/kaishi/ubuntu-dotfiles/opencode/setup.sh
 ```
 
 ### 設定の配布・検証
@@ -64,5 +81,3 @@ cd ~/Dev/kaishi/ubuntu-dotfiles
 nix flake update
 home-manager switch --flake .#ubuntu
 ```
-
-

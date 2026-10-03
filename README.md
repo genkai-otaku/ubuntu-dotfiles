@@ -1,7 +1,7 @@
 # dotfiles
 
 ## 概要
-Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、tmux（iPhone SSH切断後も grok を残す）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Codeのグローバル設定（フック・スキル・permissionsなど）、Grok CLI（xAI）の設定もあわせて管理する。`.claude/`配下は`.claude/setup.sh`で`~/.claude`へシンボリックリンクされ（`home-manager switch`時にactivationからも自動実行される）、このリポジトリを編集するだけで全プロジェクトのClaude Code設定に反映される。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLI、外出先のiPhoneからTailscale経由でSSHするためのOpenSSH / Tailscaleは`bootstrap.sh`が導入する。tmux本体はNix、SSH時の自動attachは`.zshrc`。
+Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、tmux（iPhone SSH切断後も grok を残す）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Code / Grok / OpenCodeの共通AIエージェント設定（指示・スキル・コマンド・権限）を管理する。`.claude/`はClaude CodeとGrok向け、`opencode/`はOpenCode向けのグローバル設定で、home-managerがそれぞれの設定ディレクトリへリンクする。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLI・OpenCode、外出先のiPhoneからTailscale経由でSSHするためのOpenSSH / Tailscaleは`bootstrap.sh`が導入する。tmux本体はNix、SSH時の自動attachは`.zshrc`。
 
 ## 技術スタック
 - Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`。CLIツールとGNOMEデスクトップのdconf設定の両方を含む）
@@ -10,9 +10,10 @@ Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する
 - VSCode / Cursor（`vscode/`配下の共通設定をhome-manager経由で書き込み可能リンクし、拡張機能をactivation時に自動導入）
 - direnv / nix-direnv（`nix/home.nix`のhome-manager設定で導入。`.envrc`のあるプロジェクトディレクトリでflakeのdevShellを自動ON/OFF）
 - Bash（`bootstrap.sh`、`.claude/setup.sh`、`.claude/hooks/`配下のシェルスクリプト）
-- Claude Code（`settings.json` / `CLAUDE.md` / Skills / Hooksによるグローバル設定管理）
+- Claude Code（`settings.json` / `AGENTS.md` / Skills / Hooksによるグローバル設定管理）
 - Grok CLI（xAI。`grok/config.toml`と`grok/AGENTS.md`をhome-manager経由で書き込み可能リンク。本体は`bootstrap.sh`が公式インストーラーで導入）
-- Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Stop/Notification時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
+- OpenCode（`opencode/`のAGENTS.md / Skills / Commands / permissions / CLI設定をhome-manager経由でリンク。本体は公式インストーラーで導入）
+- Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Claude/GrokのStop・NotificationとOpenCode V2の実行成功時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
 - GitHub Actions（`.github/workflows/`配下で共通ワークフローを管理し、他リポジトリへ配布）
 - GitHub CLI（`gh`、`/pr`スキル内でPR作成に使用）
 
@@ -20,14 +21,14 @@ Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する
 ```
 dotfiles/
 ├── README.md
-├── CLAUDE.md              # リポジトリのアーキテクチャ・禁止事項・検証（Claude Code向け）
+├── AGENTS.md              # Claude Code / OpenCode共通のリポジトリ固有指示
 ├── flake.nix              # Nix環境のエントリポイント（home-manager standalone）
 ├── flake.lock             # パッケージバージョンの固定（`nix flake update`後は必ずコミット）
 ├── bootstrap.sh           # 新しいUbuntuマシンの1コマンドセットアップ
 ├── nix/
 │   ├── README.md          # Nix運用の詳細ドキュメント
 │   ├── packages.nix       # CLIツール（git・gh・vim・Node.js等。Nixで管理）
-│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ、作業ディレクトリ作成（`.claude/dev-roots` から導出））
+│   ├── home.nix           # home-manager設定（zsh・gitconfig・Grok/OpenCode・VSCode/Cursorのリンク、VSCode IME用起動ラッパー、拡張機能、direnv、.claude/、claude-notify依存、ghエイリアス、GNOME Terminal見た目、既定ブラウザ、作業ディレクトリ作成（`.claude/dev-roots` から導出））
 │   ├── keyboard.nix       # GNOMEのキーボード設定（JIS配列・IME切り替え・キーリピート delay=250ms・TUI向け embed-preedit-text=false）
 │   └── desktop.nix        # GNOMEデスクトップ設定（テーマ・電源・キーバインド・Dock・ウィンドウボタン左上。VSCode側は vscode/）
 ├── git/
@@ -36,7 +37,17 @@ dotfiles/
 ├── grok/
 │   ├── README.md
 │   ├── config.toml        # Grok CLI（xAI）の設定実体（home.nixが~/.grok/config.tomlへ書き込み可能リンク）
-│   └── AGENTS.md          # Grokのグローバル指示（Grok固有の補足のみ。共通ルールはClaude互換で.claude/CLAUDE.mdが読まれる）
+│   └── AGENTS.md          # Grokのグローバル指示（Grok固有の補足のみ。共通ルールは~/.claude/CLAUDE.mdが読まれる）
+├── opencode/
+│   ├── README.md          # OpenCode設定とClaude/Grokとの共有範囲
+│   ├── AGENTS.md          # OpenCodeのグローバル共通指示
+│   ├── opencode.json      # 権限設定（秘密情報・Git・破壊的操作等）
+│   ├── cli.json           # TUI設定（ダークテーマ・権限確認・OS通知）
+│   ├── plugins/mobile-notify.js # タスク成功時にiPhoneへWeb Push通知
+│   ├── agents/            # /code-review が起動するread-onlyレビューAgent
+│   ├── commands/          # /pr・/readme・/clean-branches・/nix-setup・/git-pull・/code-review
+│   ├── skills/pr/SKILL.md # OpenCode用のPR作成手順
+│   └── setup.sh           # OpenCode公式インストーラー
 ├── vscode/
 │   ├── README.md          # VSCode/Cursor共通設定の詳細ドキュメント（統合ターミナルの日本語IME含む）
 │   ├── settings.json      # エディタ設定の実体（両エディタで共有）
@@ -58,7 +69,7 @@ dotfiles/
 ├── tmux/
 │   ├── README.md         # SSH切断後もセッションを残す説明
 │   └── .tmux.conf        # 256色・履歴（home.nix が ~/.tmux.conf へリンク）
-├── claude-notify/         # iPhoneプッシュ通知の送信スクリプト（.claude/hooks/notify.sh から呼ばれる）
+├── claude-notify/         # iPhoneプッシュ通知の送信スクリプト（Claude/Grokフック・OpenCode pluginから呼ばれる）
 │   ├── README.md
 │   ├── send-push.mjs     # Web Push送信本体（VAPID署名。設定は ~/.claude/claude-notify.json）
 │   ├── package.json      # 依存は web-push のみ
@@ -67,7 +78,7 @@ dotfiles/
 │   ├── README.md         # iPhone側の接続手順とUbuntu側の残作業
 │   └── setup.sh          # OpenSSH / Tailscale を冪等に導入（bootstrap と home-manager switch から実行）
 └── .claude/
-    ├── CLAUDE.md          # 全プロジェクト向けグローバル指示（言語・Git・Nix・検証・破壊的操作）。プロジェクト固有は書かない
+    ├── global-instructions.md # 全プロジェクト向け指示の実体。setup.sh が ~/.claude/CLAUDE.md にリンク（二重読込を避ける）
     ├── rules/orchestration.md # Claude Code 専用のモデル振り分け（Grok は読まない）
     ├── settings.json      # フック・permissions・languageなどの設定
     ├── setup.sh           # .claude/ 配下（gitが管理するファイル）を ~/.claude へシンボリックリンク
@@ -83,7 +94,8 @@ dotfiles/
     │   ├── pr/SKILL.md            # /pr スキル
     │   ├── readme/SKILL.md        # /readme スキル
     │   ├── clean-branches/SKILL.md # /clean-branches スキル
-    │   └── nix-setup/SKILL.md     # /nix-setup スキル
+    │   ├── nix-setup/SKILL.md     # /nix-setup スキル
+    │   └── git-pull/              # /git-pull スキルと共有スクリプト
     ├── tests/             # フックのテーブル駆動テスト（run.shで一括実行。~/.claude へは配布しない）
     └── README.md
 ```
@@ -93,7 +105,7 @@ dotfiles/
 ```zsh
 curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/bootstrap.sh | bash
 ```
-`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用（tmux・`.tmux.conf`・SSH時の自動attachを含む）、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code CLIの導入、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、Grok CLIの導入、OpenSSHサーバーとTailscaleの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、`sudo tailscale up`、iPhoneのTailscale / SSHアプリ、各アプリへのサインイン等）は[nix/README.md](/nix/README.md)と[ssh-tailscale/README.md](/ssh-tailscale/README.md)を参照。tmuxは追加作業なし（SSHした時点で入る）。
+`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用（tmux・`.tmux.conf`・SSH時の自動attach、Claude Code / Grok / OpenCodeの設定リンクを含む）、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code / Grok / OpenCode CLIの導入、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、OpenSSHサーバーとTailscaleの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、各AIツールの認証、`sudo tailscale up`、iPhoneのTailscale / SSHアプリ等）は[nix/README.md](/nix/README.md)と[ssh-tailscale/README.md](/ssh-tailscale/README.md)を参照。tmuxは追加作業なし（SSHした時点で入る）。
 
 ### Nix環境の適用・更新（2回目以降）
 ```zsh
@@ -106,6 +118,10 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ```
 `.claude/`配下のうちgitが管理するファイル（`setup.sh`・`README.md`・`tests/` 等の除外分を除く）が`~/.claude`へシンボリックリンクされる（`home-manager switch`時にはactivationからも自動実行される）。
+
+### OpenCode
+
+`bootstrap.sh`がOpenCode CLIを公式インストーラーで導入する。設定はhome-managerで`~/.config/opencode/`へリンクされる。xAI/Grokを使う場合はOpenCode起動後に`/connect`で接続し、`/models`でモデルを選ぶ。詳細は[opencode/README.md](/opencode/README.md)。
 
 ### zsh設定の反映
 ```zsh
@@ -130,10 +146,11 @@ nix flake update
 - `/readme`：READMEをコードベースの現状に合わせて更新（なければ新規作成）する
 - `/clean-branches`：ローカルブランチのうちmain・develop以外を削除して整理する
 - `/nix-setup`：新規プロジェクトの開発環境をNixのdevShell + direnvでセットアップする
+- `/git-pull`：ワークスペース直下のリポジトリをmainに切り替えてfast-forward-onlyでpullする（変更中や分岐したリポジトリは保全）
 
 ### セットアップスクリプト
 - `bash .claude/setup.sh`：`.claude/`配下（gitが管理するファイルのみ）を`~/.claude`へシンボリックリンク
-- `bash .claude/tests/run.sh`：`.claude/`の構文チェックとフック（pr-mode・guard-destructive・validate-claude-config）のテーブル駆動テスト。test-pr-mode.sh は HOME を隔離するので本物の `~/.claude/pr-mode.log` は増えない。`.claude/hooks/`を変更したら必ず通す
+- `bash .claude/tests/run.sh`：`.claude/`の構文チェック、git-pullの一時リポジトリ統合テスト、フック（pr-mode・guard-destructive・validate-claude-config）のテーブル駆動テスト。test-pr-mode.sh は HOME を隔離するので本物の `~/.claude/pr-mode.log` は増えない。`.claude/`を変更したら必ず通す
 - `nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath`：`flake.nix` / `nix/`の評価エラーと`git add`漏れを検出（`switch`の前に流す）
 - `.claude/dev-roots`（削除・作業ディレクトリの許可ルート。1行1パス・`~/`始まり・`#`から行末はコメント）を変更したときは、`git add .claude/dev-roots`のうえで上記を実行し、`bash .claude/setup.sh`も再実行する
 - `bash vscode/install-extensions.sh`：`vscode/extensions.txt`の拡張機能をVSCode/Cursorへ導入（`home-manager switch`時にも自動実行される。冪等）
@@ -156,6 +173,7 @@ cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
 - [VSCode](/vscode/README.md)
 - [git](/git/README.md)
 - [Grok](/grok/README.md)
+- [OpenCode](/opencode/README.md)
 - [Claude Code](/.claude/README.md)
 - [claude-notify](/claude-notify/README.md)
 - [iPhoneからSSH（Tailscale）](/ssh-tailscale/README.md)
