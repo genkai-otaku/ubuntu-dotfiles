@@ -137,6 +137,60 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/AGENTS.md";
       force = true;
     };
+    # OpenCode のグローバル設定。AGENTS.md・permission・CLI設定・通知plugin・コマンド・Skillを
+    # リポジトリ実体への書き込み可能リンクにして、変更をdotfilesで管理する。
+    ".config/opencode/AGENTS.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/AGENTS.md";
+      force = true;
+    };
+    ".config/opencode/opencode.json" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/opencode.json";
+      force = true;
+    };
+    ".config/opencode/cli.json" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/cli.json";
+      force = true;
+    };
+    ".config/opencode/plugins/mobile-notify.js" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/plugins/mobile-notify.js";
+      force = true;
+    };
+    ".config/opencode/commands/pr.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/commands/pr.md";
+      force = true;
+    };
+    ".config/opencode/commands/readme.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/commands/readme.md";
+      force = true;
+    };
+    ".config/opencode/commands/clean-branches.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/commands/clean-branches.md";
+      force = true;
+    };
+    ".config/opencode/commands/nix-setup.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/commands/nix-setup.md";
+      force = true;
+    };
+    ".config/opencode/commands/git-pull.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/commands/git-pull.md";
+      force = true;
+    };
+    ".config/opencode/commands/code-review.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/commands/code-review.md";
+      force = true;
+    };
+    ".config/opencode/agents/code-review.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/agents/code-review.md";
+      force = true;
+    };
+    ".config/opencode/agents/pr.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/agents/pr.md";
+      force = true;
+    };
+    ".config/opencode/skills/pr/SKILL.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/skills/pr/SKILL.md";
+      force = true;
+    };
     # VSCode 起動ラッパー。snap の electron-launch が GDK_BACKEND=wayland と
     # --ozone-platform=x11 を同時に立て、IME が二重になって TUI へ変換中プレビュー
     # が漏れるのを、DISABLE_WAYLAND=1 + GDK_BACKEND=x11 + GTK_IM_MODULE=xim で一本化する。
@@ -176,6 +230,21 @@ in
         echo "Grok config.toml の実体変更をリポジトリへ取り込みました"
       fi
     fi
+  '';
+
+  # OpenCodeが設定保存時にシンボリックリンクを実体ファイルで置き換えた場合、
+  # home.file の force=true でリンクを戻す前に新しい内容をリポジトリへ取り込む。
+  home.activation.captureOpenCodeConfigWrites = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
+    for name in opencode.json cli.json; do
+      dest="$HOME/.config/opencode/$name"
+      src="${dotfilesPath}/opencode/$name"
+      if [ -f "$dest" ] && [ ! -L "$dest" ] && [ -f "$src" ] && [ "$dest" -nt "$src" ]; then
+        if ! ${pkgs.diffutils}/bin/cmp -s "$src" "$dest"; then
+          run ${pkgs.coreutils}/bin/cp "$dest" "$src"
+          echo "OpenCode $name の実体変更をリポジトリへ取り込みました"
+        fi
+      fi
+    done
   '';
 
   # ~/.claude 配下のリンクは既存の setup.sh に委譲する。
