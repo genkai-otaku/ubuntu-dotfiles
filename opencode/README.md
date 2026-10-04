@@ -21,7 +21,7 @@ OpenCode V2のグローバル設定。設定ファイルはhome-managerで `~/.c
 - OpenCodeは `~/.config/opencode/AGENTS.md` を全プロジェクト共通の指示として読み込む。
 - OpenCodeは `~/.claude/skills/` も互換ソースとして検索するため、`readme`・`clean-branches`・`nix-setup`・`git-pull` Skillsは既存定義を共有する。`pr` は明示した `opencode/skills` ソースから読み、Claude Code版のフック手順と重ならないようOpenCode用のpermission手順を使う。
 - Claude CodeのHooks、settings.json、モデル振り分けはOpenCodeでは動かない。代替としてOpenCodeのpermissionルールを設定している。
-- `/pr` はSkillを明示的に読み込み、子セッションを作らず実行する。通常コミット・`origin` へのPR用ブランチprefixのpush・PR作成の許可は非表示の専用Agentにだけ設定し、他のセッションでは従来どおり確認する。force push・refspec push等は拒否する。
+- `/pr` はCommand本文の受信を明示起動として扱い、SkillツールでID `pr` を読み込んで子セッションを作らず実行する。通常コミット・`origin` へのPR用ブランチprefixのpush・PR作成の許可は非表示の専用Agentにだけ設定し、他のセッションでは従来どおり確認する。force push・refspec push等は拒否する。
 - `cli.json` のOS通知に加え、グローバルプラグインが`session.execution.succeeded`（実行成功）時にiPhoneへWeb Push通知する。イベントの`data.sessionID`から親セッションを確認し、Claude/Grokと同じ`~/.claude/claude-notify.json`・送信スクリプト・PWAを使うため、通知設定の追加は不要。
 - 通知対象は親セッションの正常完了のみ。V2ではバックグラウンドサービスがプラグインを読み込むため、変更後は`opencode service restart`で再読み込みする（実行中セッションは切断される）。
 - 通知が届かない場合は`opencode api get /api/plugin`でプラグイン状態を確認し、`~/.claude/claude-notify.log`で送信側の結果、`~/.local/share/opencode/log/opencode.log`でプラグインの読み込みエラーを確認する。

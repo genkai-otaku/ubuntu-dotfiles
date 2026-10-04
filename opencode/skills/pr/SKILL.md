@@ -1,6 +1,6 @@
 ---
 name: pr
-description: ユーザーが /pr を明示的に実行したときだけ、変更をコミットしてGitHubへPull Requestを作成する。自然言語の「PRを出して」では使わない。
+description: 明示的な /pr Commandから呼び出され、変更をコミットしてGitHubへPull Requestを作成する。自然言語の「PRを出して」では使わない。
 metadata:
   opencode/autoinvoke: false
 ---
@@ -11,7 +11,7 @@ metadata:
 
 ## 前提
 
-- このSkillはユーザーが `/pr` コマンドを明示的に実行したときだけ使う。自然言語で「PRを出して」と依頼された場合は実行せず、`/pr` を案内する。
+- このSkillは `/pr` Command本文から呼び出されたときに使う。Command本文の受信をユーザーによる明示起動の証拠として扱い、会話本文に `/pr` の文字列が見えないことを理由に中断・拒否しない。通常の自然言語で「PRを出して」と依頼された場合は実行せず、`/pr` を案内する。
 - OpenCodeではClaude Code / Grokのフックは動作しない。`opencode.json` のpermissionルールとOpenCode標準の確認を安全境界として使い、確認を迂回しない。
 - `git commit`・`git push`・`gh pr create` はそれぞれ独立した単一コマンドで実行する。`&&`・`;`・`|`・改行で他のコマンドと連結しない。確認が表示されたらユーザーの判断を待つ。
 - permission確認を拒否されたコマンドは再試行しない。その操作を行わず、止まった段階と結果を報告する。
