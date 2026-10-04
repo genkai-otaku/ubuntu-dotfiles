@@ -59,8 +59,10 @@ dotfiles/
 │   ├── claude-code.md    # Claude Code組み込みスラッシュコマンド一覧（リファレンス）
 │   └── private.md        # このリポジトリで使えるコマンド・スキルの個人用早見表
 ├── .github/
+│   ├── dependabot.yml               # Nix・pnpm・GitHub Actionsの日次更新
 │   └── workflows/
-│       └── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
+│       ├── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
+│       └── request-dependabot-review.yml # Dependabot PRでレビューを自動依頼
 ├── zsh/
 │   ├── .zshrc            # Oh My Zsh + Powerlevel10k、SSH時のtmux attach、direnv フック
 │   ├── .bashrc           # 対話bashを即zshへexecする引き継ぎ用
