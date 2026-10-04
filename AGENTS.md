@@ -17,7 +17,7 @@ Ubuntu用の個人dotfiles。全体像は `README.md`、Nix運用は `nix/README
 - `editorUserFiles` の `force = true` を外さない。`window.titleBarStyle` / `menuStyle` / `menuBarVisibility` は必ず一緒に変更する。
 - `direnv` の設定を `enableZshIntegration` に置き換えない。`~/.zshrc` は `mkOutOfStoreSymlink` で管理する。
 - `.claude/` は全プロジェクトに反映される。home-manager標準管理へ移さない（`setup.sh` のセルフヒーリングを維持する）。`.claude/rules/` はClaude Code専用なので共通ルールを置かず、`grok/AGENTS.md` に共通ルールを重複させない。
-- `/pr` はSkill・共通指示・permission・Hookの四層で整合させる。`skills/pr/SKILL.md` の先頭H1とGrok用 `<!-- pr-mode-enable -->` は `pr-mode.sh` の判定に使うため維持する。OpenCodeではClaude/Grokの `pr-mode.sh` を実行しない。明示的な `/pr` 起動に限り、専用Agentで通常コミット・`origin` へのPR用ブランチprefixのpush・PR作成を許可し、他のセッションでは確認を維持する。force push等は禁止する。
+- `/pr` はSkill・共通指示・permission・Hookの四層で整合させる。`skills/pr/SKILL.md` の先頭H1とGrok用 `<!-- pr-mode-enable -->` は `pr-mode.sh` の判定に使うため維持する。OpenCodeではClaude/Grokの `pr-mode.sh` を実行しない。OpenCodeでは `/pr` Command本文を受け取ったこと自体、またはユーザー発言の先頭トークンが `@pr` であることを明示起動として扱う。`@pr` はMarkdownのコード表記・引用符で囲まれていても同じトークンとして認識し、UI上にCommand名が表示されることを追加条件にしない。専用Agentで通常コミット・`origin` へのPR用ブランチprefixのpush・PR作成を許可する。他のセッションでは確認を維持する。force push等は禁止する。
 - `.claude/hooks/guard-destructive.sh` の拒否パターンを際限なく増やさない。解釈不能な書き方は説明付き確認に倒す設計を維持する。削除可能ルートは `.claude/dev-roots` だけで定義する。
 - `user.name` / `user.email` をリポジトリに書かない。`docs/` はgitignore対象の手元資料置き場。
 

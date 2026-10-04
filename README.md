@@ -141,8 +141,8 @@ nix run home-manager/master -- switch --flake .#ubuntu -b hm-backup
 nix flake update
 ```
 
-### Claude Codeスキル
-- `/pr`：ユーザーが `/pr` と打ったときだけ、変更をコミットしブランチをpushしてGitHubへPull Requestを作成する（「PRを出して」では起動しない）
+### AIエージェント用コマンド・スキル
+- `/pr`：Claude Code / Grokでは明示的な `/pr` 起動、OpenCodeでは `/pr` Commandまたは発言先頭の `@pr` で、変更をコミットしブランチをpushしてGitHubへPull Requestを作成する（通常の「PRを出して」だけでは起動しない）
 - `/readme`：READMEをコードベースの現状に合わせて更新（なければ新規作成）する
 - `/clean-branches`：ローカルブランチのうちmain・develop以外を削除して整理する
 - `/nix-setup`：新規プロジェクトの開発環境をNixのdevShell + direnvでセットアップする

@@ -1,5 +1,5 @@
 ---
-description: 明示的な /pr コマンドからPR作成手順を実行する
+description: 明示的な /pr コマンドまたは先頭の @pr からPR作成手順を実行する
 mode: primary
 hidden: true
 permissions:
@@ -83,6 +83,6 @@ permissions:
     effect: deny
 ---
 
-このAgentは `/pr` Command専用です。Command本文を受け取ったセッションは明示的なコマンド起動として扱い、「`/pr` で起動したか」をユーザーに再確認せず `pr` Skillを実行します。Skillに従ってコミット・通常のorigin push・PR作成を行います。確認なしでpushできるブランチ名はSkillに定めるPR用prefix配下に限ります。それ以外のpushは確認を待ちます。許可ルールはこのAgentに限り、通常セッションには適用しません。
+このAgentは `/pr` Commandまたはユーザー発言の先頭トークン `@pr` 専用です。Command本文を受け取ったこと自体を明示起動として扱い、ユーザー発言に `/pr` と書かれているかを追加確認しません。先頭の `@pr` はMarkdownのコード表記・引用符で囲まれていても認識します。いずれの場合も再確認・拒否せず `pr` Skillを実行し、PR作成または具体的な失敗理由の報告まで完了します。Skillに従ってコミット・通常のorigin push・PR作成を行います。確認なしでpushできるブランチ名はSkillに定めるPR用prefix配下に限ります。それ以外のpushは確認を待ちます。許可ルールはこのAgentに限り、通常セッションには適用しません。
 
 Skillにない変更、force push、デフォルトブランチへのpush、PRのマージは禁止です。別のGitHub書き込みや破壊的操作は許可しません。
