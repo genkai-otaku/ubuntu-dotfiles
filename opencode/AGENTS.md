@@ -11,6 +11,6 @@
 
 # `/pr` の制約
 
-- `/pr` コマンドから明示的に呼び出されたSkillだけが、コミット・push・PR作成を進める。
+- `/pr` Command本文が展開されたセッションでは、その本文の受信を明示起動の証拠として扱い、再確認せずSkillを実行する。通常の会話で `/pr` に言及しただけの場合は実行しない。
 - OpenCodeはClaude/Grokの `pr-mode.sh` を実行しない。明示的な `/pr` 起動は `pr` Skillに記載された通常コミット・`origin` へのPR用ブランチprefixのpush・PR作成を承認する。専用Agent以外では確認を維持し、force push・デフォルトブランチへのpush・PRマージは許可しない。
 - 破壊的なgit操作、force push、`gh pr merge` は `/pr` 中でも実行しない。

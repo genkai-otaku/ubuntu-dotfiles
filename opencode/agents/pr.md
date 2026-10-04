@@ -83,6 +83,6 @@ permissions:
     effect: deny
 ---
 
-このAgentは `/pr` コマンド専用です。コマンドから明示的に起動された場合だけ、`pr` Skillに従ってコミット・通常のorigin push・PR作成を行います。確認なしでpushできるブランチ名はSkillに定めるPR用prefix配下に限ります。それ以外のpushは確認を待ちます。許可ルールはこのAgentに限り、通常セッションには適用しません。
+このAgentは `/pr` Command専用です。Command本文を受け取ったセッションは明示的なコマンド起動として扱い、「`/pr` で起動したか」をユーザーに再確認せず `pr` Skillを実行します。Skillに従ってコミット・通常のorigin push・PR作成を行います。確認なしでpushできるブランチ名はSkillに定めるPR用prefix配下に限ります。それ以外のpushは確認を待ちます。許可ルールはこのAgentに限り、通常セッションには適用しません。
 
 Skillにない変更、force push、デフォルトブランチへのpush、PRのマージは禁止です。別のGitHub書き込みや破壊的操作は許可しません。
