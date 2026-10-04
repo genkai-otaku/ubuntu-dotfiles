@@ -1,0 +1,23 @@
+name: Request Dependabot Review
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  request-review:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: >-
+          gh api --method POST
+          "repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
+          -f "reviewers[]=seino914"

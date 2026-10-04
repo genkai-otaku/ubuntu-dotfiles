@@ -59,8 +59,10 @@ dotfiles/
 │   ├── claude-code.md    # Claude Code組み込みスラッシュコマンド一覧（リファレンス）
 │   └── private.md        # このリポジトリで使えるコマンド・スキルの個人用早見表
 ├── .github/
+│   ├── dependabot.yml               # Nix・pnpm・GitHub Actionsの日次更新
 │   └── workflows/
-│       └── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
+│       ├── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
+│       └── request-dependabot-review.yml # Dependabot PRでレビューを自動依頼
 ├── zsh/
 │   ├── .zshrc            # Oh My Zsh + Powerlevel10k、SSH時のtmux attach、direnv フック
 │   ├── .bashrc           # 対話bashを即zshへexecする引き継ぎ用
@@ -141,8 +143,8 @@ nix run home-manager/master -- switch --flake .#ubuntu -b hm-backup
 nix flake update
 ```
 
-### Claude Codeスキル
-- `/pr`：ユーザーが `/pr` と打ったときだけ、変更をコミットしブランチをpushしてGitHubへPull Requestを作成する（「PRを出して」では起動しない）
+### AIエージェント用コマンド・スキル
+- `/pr`：Claude Code / Grokでは明示的な `/pr` 起動、OpenCodeでは `/pr` Commandまたは発言先頭の `@pr` で、変更をコミットしブランチをpushしてGitHubへPull Requestを作成する（通常の「PRを出して」だけでは起動しない）
 - `/readme`：READMEをコードベースの現状に合わせて更新（なければ新規作成）する
 - `/clean-branches`：ローカルブランチのうちmain・develop以外を削除して整理する
 - `/nix-setup`：新規プロジェクトの開発環境をNixのdevShell + direnvでセットアップする
