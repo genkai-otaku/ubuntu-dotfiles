@@ -29,10 +29,23 @@ OpenCodeのグローバル設定は [`opencode/README.md`](../opencode/README.md
 bash ~/Dev/kaishi/ubuntu-dotfiles/opencode/setup.sh
 ```
 
+## Codex
+
+```text
+/pr
+```
+
+手順の実体は `.claude/skills/pr/SKILL.md`（`codex/prompts/pr.md` がそれを読ませる）。`/pr` 外のコミット・push・PR操作は `codex/hooks/guard.sh` が拒否する。設定は [`codex/`](../codex)。
+
+## Devin
+
+グローバル指示と `permissions` のみ（Commandは未整備）。設定は [`devin/config.json`](../devin/config.json)。
+
 ### 設定の配布・検証
 ```zsh
 bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh      # .claude/ を ~/.claude へリンク（ファイル追加後に再実行）
-bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/tests/run.sh  # 構文チェック＋フックのテスト
+bash ~/Dev/kaishi/ubuntu-dotfiles/ai/install.sh         # 全CLI共通のグローバル指示を各CLIへ配布（ai/ の変更後に再実行）
+bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/tests/run.sh  # 構文チェック＋フック・配布のテスト
 nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath
 ```
 
