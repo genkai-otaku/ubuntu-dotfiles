@@ -1,0 +1,13 @@
+# Codex CLI の設定（実体は dotfiles の codex/config.toml。~/.codex/config.toml はここへのリンク）。
+# グローバル指示は ~/.codex/AGENTS.md（ai/core.md + ai/codex.md の連結。bash ai/install.sh が生成する）。
+# フックは ~/.codex/hooks.json（実体は codex/hooks.json）。
+#
+# model は意図的に未設定（Codex の既定を使う）。固定したいときはユーザーが /model で選ぶか
+# ここに model = "<id>" を足す。モデルIDは版によって変わるため dotfiles では固定しない。
+
+approval_policy = "on-request"   # 既定の untrusted より緩い。承認が要る操作だけ尋ねる
+sandbox_mode = "workspace-write" # 作業ディレクトリの外へは書かない
+model_reasoning_effort = "high"
+
+[sandbox_workspace_write]
+network_access = true            # gh・nix・パッケージ取得に必要
