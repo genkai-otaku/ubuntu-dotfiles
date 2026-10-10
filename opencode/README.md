@@ -6,8 +6,8 @@ OpenCode V2のグローバル設定。設定ファイルはhome-managerで `~/.c
 
 | ファイル | 役割 |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | 全プロジェクト共通の日本語出力・Git・Nix・検証・秘密情報のルール |
-| [`opencode.json`](opencode.json) | 秘密ファイルの読み取り禁止、Git書き込み・破壊的操作・恒久インストールの確認、`sudo` / force pushの拒否 |
+| [`../ai/opencode.md`](../ai/opencode.md) | OpenCode 固有の差分のみ（共通ルールは [`../ai/core.md`](../ai/core.md)。両者を連結した `~/.config/opencode/AGENTS.md` を `ai/install.sh` が生成する） |
+| [`opencode.json`](opencode.json) | Skillのソース、秘密ファイルの読み取り禁止、Git書き込み・破壊的操作・恒久インストールの確認、`sudo` / force pushの拒否 |
 | [`cli.json`](cli.json) | TUIのダークテーマ、権限確認、OS通知 |
 | [`plugins/mobile-notify.js`](plugins/mobile-notify.js) | V2の実行成功時に、既存の`claude-notify`送信機能でiPhoneへ通知 |
 | [`commands/`](commands/) | `/pr`・`/readme`・`/clean-branches`・`/nix-setup`・`/git-pull`・`/code-review` |
@@ -18,7 +18,7 @@ OpenCode V2のグローバル設定。設定ファイルはhome-managerで `~/.c
 
 ## Claude Code / Grokとの共有
 
-- OpenCodeは `~/.config/opencode/AGENTS.md` を全プロジェクト共通の指示として読み込む。
+- 全プロジェクト共通の指示は `~/.config/opencode/AGENTS.md`。実体は [`ai/core.md`](../ai/README.md)（全CLI共通）＋ `ai/opencode.md`（OpenCode固有の差分）で、`ai/install.sh` が連結生成する（手で編集しない）。**このファイルを消さないこと**：OpenCode はグローバル指示が無いと Claude 互換フォールバックで `~/.claude/CLAUDE.md`（= `ai/core.md`）を読むため、`ai/opencode.md` が読まれなくなる。同じ理由で `opencode.json` の `instructions` に `ai/` を列挙しない（AGENTS.md と二重に読まれる）。
 - OpenCodeは `~/.claude/skills/` も互換ソースとして検索するため、`readme`・`clean-branches`・`nix-setup`・`git-pull` Skillsは既存定義を共有する。`pr` は明示した `opencode/skills` ソースから読み、Claude Code版のフック手順と重ならないようOpenCode用のpermission手順を使う。
 - Claude CodeのHooks、settings.json、モデル振り分けはOpenCodeでは動かない。代替としてOpenCodeのpermissionルールを設定している。
 - `/pr` Command本文の受信、またはユーザー発言先頭の独立した `@pr` を明示起動として扱い、SkillツールでID `pr` を読み込んで子セッションを作らず実行する。通常コミット・`origin` へのPR用ブランチprefixのpush・PR作成の許可は非表示の専用Agentにだけ設定し、他のセッションでは従来どおり確認する。force push・refspec push等は拒否する。

@@ -131,18 +131,34 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/config.toml";
       force = true;
     };
-    # Grok CLI のグローバル指示ファイル（Grok固有の補足のみ。共通ルールは
-    # Claude互換モードで ~/.claude/CLAUDE.md から読み込まれるため重複させない）
-    ".grok/AGENTS.md" = {
-      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/AGENTS.md";
+    # Codex CLI の設定・フック・プロンプト。Orca 等の外部ツールが hooks.json へ
+    # 書き込むため、Grok config と同じ書き込み可能リンクにして
+    # captureCodexConfigWrites が switch 直前に実体側を取り込む
+    ".codex/config.toml" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/config.toml";
       force = true;
     };
-    # OpenCode のグローバル設定。AGENTS.md・permission・CLI設定・通知plugin・コマンド・Skillを
+    ".codex/hooks.json" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks.json";
+      force = true;
+    };
+    ".codex/hooks/guard.sh" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks/guard.sh";
+      force = true;
+    };
+    ".codex/prompts/pr.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/prompts/pr.md";
+      force = true;
+    };
+    # Devin CLI の設定（モデル・permissions・他ツールのルール読み込みの可否）
+    ".config/devin/config.json" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/devin/config.json";
+      force = true;
+    };
+    # OpenCode のグローバル設定。permission・CLI設定・通知plugin・コマンド・Skillを
     # リポジトリ実体への書き込み可能リンクにして、変更をdotfilesで管理する。
-    ".config/opencode/AGENTS.md" = {
-      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/AGENTS.md";
-      force = true;
-    };
+    # グローバル指示は opencode.json の instructions が ai/ を直接読むため、
+    # ~/.config/opencode/AGENTS.md は置かない（二重読み込みを避ける）。
     ".config/opencode/opencode.json" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/opencode.json";
       force = true;
@@ -232,6 +248,21 @@ in
     fi
   '';
 
+  # Codex / Orca が ~/.codex/ のリンクを実体ファイルで置き換えた場合、
+  # home.file の force=true でリンクを戻す前に新しい内容をリポジトリへ取り込む
+  home.activation.captureCodexConfigWrites = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
+    for name in config.toml hooks.json; do
+      dest="$HOME/.codex/$name"
+      src="${dotfilesPath}/codex/$name"
+      if [ -f "$dest" ] && [ ! -L "$dest" ] && [ -f "$src" ] && [ "$dest" -nt "$src" ]; then
+        if ! ${pkgs.diffutils}/bin/cmp -s "$src" "$dest"; then
+          run ${pkgs.coreutils}/bin/cp "$dest" "$src"
+          echo "Codex $name の実体変更をリポジトリへ取り込みました"
+        fi
+      fi
+    done
+  '';
+
   # OpenCodeが設定保存時にシンボリックリンクを実体ファイルで置き換えた場合、
   # home.file の force=true でリンクを戻す前に新しい内容をリポジトリへ取り込む。
   home.activation.captureOpenCodeConfigWrites = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
@@ -255,6 +286,14 @@ in
   # （activation の PATH は最小構成で git が無い）
   home.activation.linkClaudeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     run env PATH="${pkgs.git}/bin:$PATH" /bin/bash ${dotfilesPath}/.claude/setup.sh
+  '';
+
+  # 全CLI共通のグローバル指示（ai/core.md + ai/<cli>.md）を各CLIへ配布する。
+  # Claude Code はリンク、include を持たない Grok / Codex / Devin は連結生成。
+  # setup.sh が ~/.claude の古いリンクを掃除した後に走らせる（順序が逆だと
+  # ~/.claude/CLAUDE.md の新しいリンクを切れリンクとして消される可能性がある）
+  home.activation.linkAiInstructions = lib.hm.dag.entryAfter [ "linkClaudeConfig" ] ''
+    run /bin/bash ${dotfilesPath}/ai/install.sh
   '';
 
   # OpenSSH サーバーと Tailscale。システムサービスなので Nix では入れず setup.sh に委譲する。

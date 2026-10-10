@@ -19,8 +19,17 @@ permission_mode = "always-approve"
 [subagents.models]
 explore = "grok-4.5"
 
+# Claude Code の設定の読み込み（既定はすべて true）。
+# 共通指示は ~/.grok/AGENTS.md（ai/core.md + ai/grok.md の連結）で渡すので、
+# Claude 側の指示ファイルは読ませない（読ませると同じ共通ルールを二重に読み、
+# Claude 専用のモデル振り分けまで入る）。
+#   rules  … ~/.claude/rules/（ai/claude.md。Claude 専用）
+#   agents … ~/.claude/ の名前付き指示ファイル（~/.claude/CLAUDE.md = ai/core.md を含む）
+# skills（~/.claude/skills/ の共有スキル）と hooks（pr-mode.sh・guard-destructive.sh を
+# 共有するために必須）は既定の true のまま使う。
 [compat.claude]
 rules = false
+agents = false
 
 [compat.codex]
 sessions = false
