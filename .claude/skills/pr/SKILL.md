@@ -32,7 +32,7 @@ allowed-tools:
 - このスキルはユーザーの `/pr` 指示によってのみ実行する。「PRを出して」では実行せず、`/pr` と打つよう案内する
 - それ以外で git commit / git push / gh pr create（別名 `gh pr new`）/ gh pr edit を実行してはならない（`hooks/pr-mode.sh` が実行前に拒否する）
 - `claude-pr-mode-*` フラグを自分で作ってはならない
-- **自動承認は単一コマンドに限る**。`git commit` / `git push` / `gh pr create` / `gh pr edit` は必ず **1つずつ独立した Bash 呼び出しで実行**し、`&&` `;` `|` や改行で他のコマンド（`git add` や `git checkout -b` を含む）と繋がない。複合コマンド・コマンド置換（`$( )`）・リダイレクトはフックが自動承認せず確認に落ちる。例外は本文を渡す `"$(cat <<'EOF' … EOF\n)"` の定型だけ
+- **自動承認は単一コマンドに限る**。`git commit` / `git push` / `gh pr create` / `gh pr edit` は必ず **1つずつ独立した Bash 呼び出しで実行**し、`&&` `;` `|` や改行で他のコマンド（`git add` や `git checkout -b` を含む）と繋がない。複合コマンド・コマンド置換（`$( )`）・リダイレクトはフックが自動承認せず確認に落ちる。例外は本文を渡す `"$(cat <<'EOF' … EOF\n)"` の定型だけ。オプションの確認（`--help` を含む）なども探りの複合コマンドにせず、単独で実行する
 - **ターンを終えない**。ターンが終わると Stop フックがフラグを消し、次のターンのコミット・push は拒否される。途中でユーザーに確認が必要なときは **AskUserQuestion**（Grok は `ask_user_question`）で質問する。やむを得ずテキスト応答でターンを終える場合は「回答後にもう一度 /pr を実行してください」と必ず添える
 - git commit / git push / gh pr create / gh pr edit は**メインセッションが直接実行**し、サブエージェントへ委譲しない（サブエージェントからの実行はフック入力の `agent_id` で見分けられ、`/pr` 中でも拒否される）
 - `--no-verify` / `--amend` / force push / `--delete` / デフォルトブランチへの push・別リポジトリ宛（`-R` / `--repo`）はフックが自動承認しない。使わない

@@ -19,6 +19,9 @@
 #        解決できて許可ルート（.claude/dev-roots の各行）か一時領域（$TMPDIR・/tmp/claude-*）の内側 → 通す
 #        解決できて外側（~/Dev 直下・ホーム・許可ルートそのもの）→ deny
 #        解決できない（未知の変数・コマンド置換・cd 併用の相対パス・範囲形ブレース・~user）→ 理由を添えて ask
+#        同じコマンドで削除より前に直線的に実行される単純な代入（S=/tmp/x && rm -rf $S/w、T=$(mktemp -d)）は
+#        値で展開してから判定する。変数名が代入以外の形（read・for 等）でも現れる、条件付き・別スコープ・
+#        関数の中の削除などは解決せず ask（詳細は split_stmts の上）
 #        dotfiles 自体・.claude 配下の設定実体・作業中ディレクトリの再帰削除 → deny
 #   3. 削除語を含むが構造を解釈できない形 … eval / sh -c / … | sh / bash <<EOF / xargs 経由、
 #                    引用符や HEREDOC が閉じていない → ask
@@ -153,14 +156,8 @@ norm_path() { # 絶対パスの . と .. を解決する（実在しなくてよ
   printf '%s' "${out:-/}"
 }
 
-is_allowed_path() { # 正規化済み絶対パス → 許可ルートの内側（ルート自身は含まない）か一時領域なら 0
+is_tmp_path() { # 正規化済み絶対パス → 一時領域（$TMPDIR・/tmp/claude-*）なら 0
   local p="$1" root
-  while IFS= read -r root; do
-    [ -n "$root" ] || continue
-    case "$p" in "$root"/?*) return 0 ;; esac
-  done <<EOF
-$ALLOWED_ROOTS
-EOF
   while IFS= read -r root; do
     [ -n "$root" ] || continue
     case "$p" in "$root"*) return 0 ;; esac
@@ -170,9 +167,256 @@ EOF
   return 1
 }
 
+is_allowed_path() { # 正規化済み絶対パス → 許可ルートの内側（ルート自身は含まない）か一時領域なら 0
+  local p="$1" root
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    case "$p" in "$root"/?*) return 0 ;; esac
+  done <<EOF
+$ALLOWED_ROOTS
+EOF
+  is_tmp_path "$p"
+}
+
 # 削除コマンドより前に cd / pushd（引数なしの "cd;" も含む）があれば相対パスの基準がずれる
 has_cd=0
 set_has_cd() { has_cd=0; printf '%s' "$1" | grep -Eq -- "${SEP}(cd|pushd)([[:space:];&|]|$)" && has_cd=1; }
+
+# ---- 同じコマンド内のリテラル代入の解決（S=/tmp/claude-x && rm -rf $S/work）----
+# 削除コマンドより前に直線的に実行される単純な代入（NAME=値 / export NAME=値 が独立した文で、
+# ^ ; & && の直後にあるもの）だけを VARENV（NAME=値 の改行区切り）に集め、削除対象の $NAME / ${NAME} を
+# その値で置き換えてから既存の範囲判定に掛ける。値はリテラル（引用符なし・'…'・$ や ` を含まない "…"）と
+# $(mktemp …)（一時領域に作るものだけ）。値の中の変数は $HOME・$TMPDIR と先に解決済みの変数だけ。
+# 変数を解決してよいのは、コマンド全体で NAME が $NAME / ${NAME} の参照以外に現れるのがその代入 1 か所だけのとき
+# （read NAME・printf -v NAME・for NAME in・unset NAME・2 回目の代入などが 1 つでもあれば解決しない）。
+# ほかに次の場合も解決しない（従来どおり ?var で ask）: 削除より前（削除文自身の前置きを含む）に制御構文・
+# { }・( )・関数定義・eval・source がある、&& の後の代入から削除まで && 以外でつながる、|| / | の後の代入、
+# ${NAME:-x} 等のパラメータ展開、HOME / TMPDIR 自体への代入
+VARENV=""; VTAINT=" "
+resolve_assign=0
+if [ "$parse_failed" -eq 0 ] && [ "$shell_string" -eq 0 ]; then
+  case "$raw1" in *=*) resolve_assign=1 ;; esac
+  printf '%s' "$raw1" | grep -Eq -- '(^|[^A-Za-z0-9_${])(HOME|TMPDIR)(\[[^]]*\])?\+?=' && resolve_assign=0
+fi
+
+# 文に分ける（引数: 文字列）。出力は「直前の区切り<TAB>文」の行（先頭の文の区切りは ^）。
+# 引用符と ( ) の中の区切りでは分けない。>& / <& / &> はリダイレクト、|& はパイプとして扱う
+split_stmts() {
+  printf '%s' "$1" | awk '
+    function emit() { printf "%s\t%s\n", sep, cur; cur = "" }
+    BEGIN { sep = "^"; cur = ""; q = ""; depth = 0 }
+    {
+      s = $0; n = length(s); i = 1
+      while (i <= n) {
+        c = substr(s, i, 1)
+        if (q != "") {
+          cur = cur c
+          if (q == "\"" && c == "\\") { cur = cur substr(s, i + 1, 1); i += 2; continue }
+          if (c == q) q = ""
+          i++; continue
+        }
+        if (c == "\\") { cur = cur c substr(s, i + 1, 1); i += 2; continue }
+        if (c == "'"'"'" || c == "\"") { q = c; cur = cur c; i++; continue }
+        if (c == "(") depth++
+        if (c == ")" && depth > 0) depth--
+        if (depth == 0) {
+          c2 = substr(s, i, 2)
+          if (c2 == "&&" || c2 == "||") { emit(); sep = c2; i += 2; continue }
+          if (c2 == "|&") { emit(); sep = "|"; i += 2; continue }
+          if (c2 == "&>") { cur = cur c2; i += 2; continue }
+          p = (i > 1) ? substr(s, i - 1, 1) : ""
+          if (c == "&" && (p == ">" || p == "<")) { cur = cur c; i++; continue }
+          if (c == ";" || c == "|" || c == "&") { emit(); sep = c; i++; continue }
+        }
+        cur = cur c; i++
+      }
+    }
+    END { emit() }'
+}
+
+lookup_var() { # 引数: 変数名, 1 なら HOME / TMPDIR も引く。値を出力し、未知なら 1
+  local line
+  if [ "$2" = 1 ]; then
+    case "$1" in
+      HOME) printf '%s' "$HOME"; return 0 ;;
+      TMPDIR) [ -n "$tmpdir" ] || return 1; printf '%s' "$tmpdir"; return 0 ;;
+    esac
+  fi
+  while IFS= read -r line; do
+    case "$line" in "$1="*) printf '%s' "${line#*=}"; return 0 ;; esac
+  done <<EOF
+$VARENV
+EOF
+  return 1
+}
+
+# $NAME / ${NAME} を解決済みの値で置き換える（引数: 文字列, lookup_var の第 2 引数）。単引用符の中は置き換えない。
+# 置き換えられない $ はそのまま残る（呼び出し側が ?var として扱う）
+subst_vars() {
+  local in="$1" out="" c val re1='^\$\{([A-Za-z_][A-Za-z0-9_]*)\}' re2='^\$([A-Za-z_][A-Za-z0-9_]*)' sq=0 dq=0
+  while [ -n "$in" ]; do
+    c=${in:0:1}
+    if [ "$sq" -eq 1 ]; then out="$out$c"; in=${in:1}; [ "$c" = "'" ] && sq=0; continue; fi
+    case "$c" in
+      "'") [ "$dq" -eq 0 ] && sq=1 ;;
+      '"') dq=$((1 - dq)) ;;
+      '\') out="$out${in:0:2}"; in=${in:2}; continue ;;
+      '$')
+        if [[ $in =~ $re1 ]] || [[ $in =~ $re2 ]]; then
+          if val=$(lookup_var "${BASH_REMATCH[1]}" "$2"); then
+            out="$out$val"; in=${in:${#BASH_REMATCH[0]}}; continue
+          fi
+        fi ;;
+    esac
+    out="$out$c"; in=${in:1}
+  done
+  printf '%s' "$out"
+}
+
+# $(mktemp 引数) の作成先（引数: mktemp の引数）。一時領域の内側と確定できるときだけ出力し、それ以外は 1
+#   引数なし / -t / --tmpdir（テンプレートに / なし）→ $TMPDIR（未設定なら未解決）
+#   -p DIR / --tmpdir=DIR → DIR が一時領域なら その内側。-t との併用は未解決
+#   テンプレートだけ → mktemp はテンプレートをそのままパスとして作る（/ を含まなければ作業ディレクトリ）。
+#   一時領域の絶対パスのときだけ解決する
+mktemp_value() {
+  local tflag=0 havep=0 pdir="" tpl="" dir name
+  case "$1" in *[\$\`\(\)\;\&\|\<\>\'\\]* | *$'\001'*) return 1 ;; esac
+  set -f; set -- $1; set +f
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -d | --directory | -q | --quiet) ;;
+      -t | --tmpdir) tflag=1 ;;
+      -p) [ $# -ge 2 ] || return 1; pdir=$2; havep=1; shift ;;
+      --tmpdir=*) pdir=${1#--tmpdir=}; havep=1 ;;
+      --*) return 1 ;;
+      -*) case "${1#-}" in *[!dqt]*) return 1 ;; *t*) tflag=1 ;; esac ;;
+      *) [ -z "$tpl" ] || return 1; tpl=$1 ;;
+    esac
+    shift
+  done
+  case "$tpl" in *'"'*) return 1 ;; esac
+  name=${tpl:-tmp.XXXXXXXXXX}
+  if [ "$havep" -eq 1 ]; then
+    [ "$tflag" -eq 0 ] || return 1
+    case "$tpl" in */*) return 1 ;; esac
+    dir=$(expand_value "$pdir") || return 1
+  elif [ "$tflag" -eq 1 ] || [ -z "$tpl" ]; then
+    case "$tpl" in */*) return 1 ;; esac
+    [ -n "$tmpdir" ] || return 1
+    dir=$tmpdir
+  else
+    case "$tpl" in /*/*) ;; *) return 1 ;; esac
+    dir=${tpl%/*}; name=${tpl##*/}
+  fi
+  case "$dir" in /*) ;; *) return 1 ;; esac
+  dir=$(norm_path "$dir")
+  is_tmp_path "$dir/$name" || return 1
+  printf '%s' "$dir/$name"
+}
+
+# 代入の右辺 → 値（引数: 右辺の文字列）。リテラルとして確定できなければ 1
+expand_value() {
+  local v="$1" inner
+  inner=$v
+  case "$inner" in '"$(mktemp'*')"') inner=${inner#\"}; inner=${inner%\"} ;; esac
+  case "$inner" in '$(mktemp)' | '$(mktemp '*')') mktemp_value "${inner:8:${#inner}-9}"; return ;; esac
+  case "$v" in *[[:space:]]* | *$'\001'* | *[\`\\\(\)]*) return 1 ;; esac
+  case "$v" in
+    "'"*"'")
+      inner=${v#\'}; inner=${inner%\'}
+      case "$inner" in '' | '~'* | *[\'\$\{\}]*) return 1 ;; esac
+      printf '%s' "$inner"; return 0 ;;
+    '"'*'"')
+      inner=${v#\"}; inner=${inner%\"}
+      case "$inner" in '~'* | *'"'*) return 1 ;; esac ;;   # 引用符の中の ~ は展開されない（相対パスの "~"）
+    *[\'\"]*) return 1 ;;
+    *)
+      inner=$v
+      case "$inner" in
+        '~') inner=$HOME ;;
+        '~/'*) inner="$HOME${inner#\~}" ;;
+        *'~'*) return 1 ;;   # ~user や途中の ~ は展開先を特定しない
+      esac ;;
+  esac
+  inner=$(subst_vars "$inner" 1)
+  case "$inner" in '' | *[\$\{\}]*) return 1 ;; esac
+  printf '%s' "$inner"
+}
+
+varenv_taint() { # 変数を未解決扱いにする（以後この変数は解決しない）
+  local n line keep=""
+  for n in "$@"; do
+    VTAINT="$VTAINT$n "
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      case "$line" in "$n="*) ;; *) keep="$keep$line"$'\n' ;; esac
+    done <<EOF
+$VARENV
+EOF
+    VARENV=$keep; keep=""
+  done
+}
+
+# コマンド全体（引用符の中も含む。HEREDOC 本文は除く）で、変数 NAME が $NAME / ${NAME} の参照以外の
+# 「裸の語」として現れる回数。解決してよいのは、これが 1（= 解決対象の NAME=値 の代入そのもの）のときだけ。
+# read / printf -v / for NAME in / unset / IFS= read NAME / NAME+= / 2 回目の代入などはすべてここで 2 以上になる
+bare_count() { printf '%s' "$raw1" | grep -oE -- '([$][{]?[#!]?)?[A-Za-z_][A-Za-z0-9_]*' | grep -cxF -- "$1"; }
+
+# 削除コマンドより前（引数）の直線的な代入から VARENV を作る
+build_varenv() {
+  local recs n idx=0 sp st first name val cond="" prev="" re
+  VARENV=""; VTAINT=" "
+  re='^(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$'
+  recs=$(split_stmts "$1")
+  n=$(printf '%s\n' "$recs" | grep -c '')
+  while IFS=$'\t' read -r sp st; do
+    idx=$((idx + 1))
+    # 直前の代入の直後が | / & なら、その代入はサブシェルで行われ効かない
+    [ -n "$prev" ] && case "$sp" in '|' | '&') varenv_taint "$prev" ;; esac
+    prev=""
+    # && の後の代入は、削除まで && だけでつながるときだけ有効
+    if [ "$sp" != "&&" ] && [ -n "$cond" ]; then varenv_taint $cond; cond=""; fi
+    st=${st#"${st%%[![:space:]]*}"}; st=${st%"${st##*[![:space:]]}"}
+    first=${st%%[[:space:]]*}
+    # 制御構文・{ }・( )・関数定義・eval / source が削除より前（削除文自身の前置きを含む）にあれば解決しない
+    case "$first" in
+      if | then | else | elif | fi | for | while | until | do | done | case | esac | select | function \
+      | '{'* | '}'* | '('* | eval | source | . | exec) VARENV=""; return ;;
+    esac
+    case "$st" in *'()'* | *'( )'*) VARENV=""; return ;; esac
+    # 最後の 1 件は削除コマンド自身の前置き（sudo・D=x rm の環境代入など）なので代入として扱わない
+    [ "$idx" -lt "$n" ] || break
+    [[ $st =~ $re ]] || continue
+    name=${BASH_REMATCH[2]}; val=${BASH_REMATCH[3]}
+    case "$sp" in '||' | '|') varenv_taint "$name"; continue ;; esac
+    # 他の形（read・for・2 回目の代入など）でも現れる変数は、どの値が効くか決めない
+    [ "$(bare_count "$name")" -eq 1 ] || { varenv_taint "$name"; continue; }
+    if val=$(expand_value "$val"); then
+      VARENV="$VARENV$name=$val"$'\n'
+      [ "$sp" = "&&" ] && cond="$cond $name"
+      prev=$name
+    else
+      varenv_taint "$name"
+    fi
+  done <<EOF
+$recs
+EOF
+}
+
+# 削除セグメントごとに、raw1 の中で前から順に位置を進めて「そのセグメントより前」を求め、VARENV を作る
+# （同じ文面のセグメントが複数あっても後ろの代入を前の削除に使わない）
+varenv_reset() { VREST=$raw1; VDONE=""; VARENV=""; }
+varenv_for_seg() {
+  local before
+  VARENV=""
+  case "$VREST" in *"$1"*) ;; *) VREST=""; return ;; esac
+  before=${VREST%%"$1"*}
+  VDONE="$VDONE$before"; VREST=${VREST#*"$1"}
+  case "$1" in *'$'*) [ "$resolve_assign" -eq 1 ] && build_varenv "$VDONE" ;; esac
+  VDONE="$VDONE$1"
+}
+# 削除対象のトークンに解決済みの変数を当てはめる（解決済みの変数が無ければそのまま）
+apply_varenv() { if [ -n "$VARENV" ]; then subst_vars "$1" 0; else printf '%s' "$1"; fi; }
 
 # トークン → 判定用の絶対パス。解決できなければ "?理由" を返す（?cd / ?var / ?subst / ?range / ?user / ?cwd）
 resolve_target() {
@@ -304,7 +548,7 @@ check_targets() { # 引数: 種別（rm|glob|dotglob）, トークン列（改�
       case "$ex" in '?'*) r="$ex" ;; *) r=$(resolve_target "$ex" "$kind") ;; esac
       case "$r" in '?'*) ask "$(explain_unresolved "$r" "$tok" 削除)"; continue ;; esac
       check_one_target "$r" "$rec"
-    done < <(expand_braces "$tok")
+    done < <(expand_braces "$(apply_varenv "$tok")")
   done <<EOF
 $toks
 EOF
@@ -334,8 +578,10 @@ extract_segs() {
 strip_cmdword() { sed -E "s/^[[:space:]]*(sudo[[:space:]]+)?([^[:space:]]*\/)?($1)[[:space:]]+//"; }
 
 # rm / rmdir / unlink
+varenv_reset
 while IFS= read -r seg; do
   [ -n "$seg" ] || continue
+  varenv_for_seg "$seg"
   case "$seg" in *xargs*) ask "前のコマンドの出力を xargs で受けて削除するコマンドです。対象が実行時に決まるため確認してください"; continue ;; esac
   set_has_cd "${raw1%"$seg"*}"
   seg=$(printf '%s' "$seg" | strip_cmdword 'rm|rmdir|unlink')
@@ -345,8 +591,10 @@ printf '%s' "$raw1" | grep -Eq -- "xargs[^;&|]*[[:space:]](rm|rmdir|unlink)([[:s
   && ask "前のコマンドの出力を xargs で受けて削除するコマンドです。対象が実行時に決まるため確認してください"
 
 # mv（移動元だけを見る。-t DIR / --target-directory=DIR の形は残りすべてが移動元、それ以外は最後の引数が移動先）
+varenv_reset
 while IFS= read -r seg; do
   [ -n "$seg" ] || continue
+  varenv_for_seg "$seg"
   set_has_cd "${raw1%"$seg"*}"
   seg=$(printf '%s' "$seg" | strip_cmdword mv)
   if printf '%s' "$seg" | grep -Eq -- '(^|[[:space:]])(-t|--target-directory)([[:space:]=]|$)'; then
@@ -368,7 +616,7 @@ while IFS= read -r seg; do
           continue ;;
       esac
       check_one_mv_source "$r"
-    done < <(expand_braces "$tok")
+    done < <(expand_braces "$(apply_varenv "$tok")")
   done <<EOF
 $srcs
 EOF
@@ -376,8 +624,10 @@ done < <(extract_segs mv)
 
 # find … -delete / -exec rm（起点だけを検査する。-name / -path / -regex の絞り込みが無ければ起点以下を丸ごと消すので dotglob 扱い。
 # "*" だけのパターンや "." で始まるパターン（ドットファイルに一致する）は絞り込みと見なさない）
+varenv_reset
 while IFS= read -r seg; do
   [ -n "$seg" ] || continue
+  varenv_for_seg "$seg"
   case "$seg" in *-delete* | *'-exec rm'* | *'-execdir rm'* | *'-exec unlink'*) ;; *) continue ;; esac
   set_has_cd "${raw1%"$seg"*}"
   seg=$(printf '%s' "$seg" | strip_cmdword find)

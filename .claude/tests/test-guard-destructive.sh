@@ -365,6 +365,58 @@ echo "#   一時領域の許可は TMPDIR に依存する（未設定なら /tmp
 genv L80 deny 'rm -rf /tmp/important-data' -u TMPDIR
 genv L81 none 'rm -rf /tmp/important-data' TMPDIR=/tmp
 genv L82 none 'rm -rf /tmp/claude-x/work' -u TMPDIR                 # /tmp/claude-* は TMPDIR 未設定でも許可
+echo "#   同じコマンド内の直線的なリテラル代入は値で解決してから範囲判定する（TMPDIR は lib.sh が一時領域に向けている）"
+g V01 none 'S=/tmp/claude-1000/xxx && rm -rf $S/e2e/work $S/e2e/data $S/e2e/state && mkdir -p $S/e2e/work'
+g V02 none 'D=/tmp/claude-1000/-home-x/abc/scratchpad/regr && rm -rf "$D" && mkdir -p "$D/r" && cd "$D/r"'
+g V03 none 'export T=$(mktemp -d) && cd "$T" && git init -q && echo x | tee a && rm -rf $T'
+g V04 none 'T=$(mktemp -d -t foo.XXXXXX); rm -rf "$T"'
+g V05 none 'T="$(mktemp -d)"; rm -rf "${T}/x"'
+g V06 none 'A=/tmp/claude-x; B=$A/y; rm -rf $B'                       # 先に解決済みの変数を値に使う
+g V07 none "D='$HOME/Dev/kaishi/app' && rm -rf \"\$D/dist\""
+g V08 none 'D=build && rm -rf $D'                                     # 相対パスの値は cwd 基準（既存の規則）
+g V09 none 'cd x && D=/tmp/claude-x && rm -rf $D'                     # && の後の代入は削除まで && でつながれば有効
+g V10 none 'D=/tmp/claude-x; find $D -name "*.tmp" -delete'
+g V11 none 'D=/tmp/claude-x; rm -rf $D/{a,b}'
+g V12 none 'T=$(mktemp -d -p /tmp/claude-1000/x); rm -rf $T'
+g V20 deny 'D=~/Documents && rm -rf "$D"'                             # 解決できたら既存の判定（許可ルート外は deny）
+g V21 deny 'D=~ && rm -rf $D'
+g V22 deny 'D=/tmp/claude-x/../../home/u; rm -rf $D'
+g V23 deny 'D=~/.claude; mv $D /tmp/x'
+g V24 ask  'D=build && cd sub && rm -rf $D'                           # cd を挟む相対パスは既存の ?cd
+g V30 ask  'D=/tmp/claude-x; if true; then D=~; fi; rm -rf "$D"'      # 制御構文の中の代入
+g V31 ask  'for d in a b; do rm -rf "$d"; done'
+g V32 ask  'rm -rf "$D"; D=/tmp/claude-x'                            # 削除より後の代入
+g V33 ask  'rm -rf $D; D=/tmp/claude-x; rm -rf $D'                    # 同じ文面の削除が前後にあっても後ろの代入を前に使わない
+g V34 ask  'D=~; rm -rf $D; D=/tmp/claude-x; rm -rf $D'               # 複数の代入
+g V35 ask  'cd x && D=/tmp/claude-x; rm -rf $D'                       # && の後の代入のあとに ; で削除（代入が実行されたか決まらない）
+g V36 ask  'cd x || D=/tmp/claude-x; rm -rf $D'
+g V37 ask  'D=/tmp/claude-x | rm -rf $D'
+g V38 ask  'D=/tmp/claude-x rm -rf $D'                                # 環境代入は $D の展開に効かない
+g V39 ask  'D=/tmp/claude-x; read D; rm -rf $D'
+g V3A ask  'D=/tmp/claude-x; export D=~ E=1; rm -rf $D'
+g V3B ask  'D=/tmp/claude-x; rm -rf ${D:-/}'                          # パラメータ展開
+g V3C ask  'S=/tmp/claude-x; S+=/../../../home; rm -rf $S'
+g V3D ask  'S=$(mktemp -d) && f() { S=~; }; f; rm -rf $S'
+g V3E ask  'S=/tmp/claude-x; (S=~); rm -rf $S'
+g V3F ask  'D=/tmp/claude-x; eval "D=~"; rm -rf $D'
+g V3G ask  'D="/tmp/claude-x/a b"; rm -rf $D'                         # 空白を含む値は分割されうるので解決しない
+g V3H ask  'D="~/x"; rm -rf "$D"'                                     # 引用符の中の ~ は展開されない
+g V3I ask  'X=/tmp/claude-x; while true; do rm -rf $X; X=~; done'
+g V3J ask  'D=$(pwd)/dist; rm -rf $D'                                 # mktemp 以外のコマンド置換
+g V3K ask  'T=$(mktemp -d foo.XXXX); rm -rf $T'                       # テンプレートだけの mktemp は作業ディレクトリに作る
+g V3L ask  'T=$(mktemp -d -p ~/Documents); rm -rf $T'                 # -p の先が一時領域でない
+g V3M ask  'TMPDIR=~; T=$(mktemp -d); rm -rf $T'                      # TMPDIR 自体の書き換え
+g V3N ask  'D=/tmp/claude-x; rm -rf $DX/a'                            # 名前の一部だけ一致する変数は別物
+genv V3O ask 'T=$(mktemp -d); rm -rf $T' -u TMPDIR                   # TMPDIR 未設定の mktemp は作成先が決まらない
+echo "#   変数名が代入以外の形（環境代入付きの read・printf -v・for・関数の中の削除）でも現れたら解決しない"
+g V40 ask  'TARGET=/tmp/claude-1000/default; [ -f cfg ] && IFS= read -r TARGET < cfg; rm -rf "$TARGET"'
+g V41 ask  'OUT=/tmp/claude-1000/out; LC_ALL=C read -r OUT < out.txt && rm -rf "$OUT"'
+g V42 ask  'D=/tmp/claude-x; LC_ALL=C printf -v D %s ~; rm -rf "$D"'
+g V43 ask  'D=/tmp/claude-x; clean() { rm -rf "$D"; }; for D in ~/Documents ~/Pictures; do clean; done'
+g V44 ask  'D=/tmp/claude-x; clean() { rm -rf "$D"; }; while read -r D; do clean; done < list.txt'
+g V45 ask  'D=/tmp/claude-x; clean() { rm -rf "$D"; }; read -r D; clean'
+g V46 ask  'D=/tmp/claude-x && { rm -rf $D; }'                         # { で始まる文の中の削除も解決しない
+g V47 ask  'D=/tmp/claude-x; function clean { rm -rf "$D"; }; clean'
 echo "#   .claude/dev-roots の各ルート: 配下の削除は確認なし、ルート自身は deny（許可ルートの定義はこのファイルだけ）"
 ROOTS_FILE="$(dirname "$(readlink -f "$HOOK" 2>/dev/null || printf '%s' "$HOOK")")/../dev-roots"
 n=0
