@@ -1,9 +1,12 @@
 #!/bin/bash
 # .claude/ 配下の検証をまとめて実行する（sudo 不要・数秒で終わる）
 #   bash .claude/tests/run.sh
-# 内容: settings.json の JSON 構文、シェルスクリプトの構文、hooks/lib/*.awk の構文、
-#       SKILL.md / agents の frontmatter、フックのテーブル駆動テスト
-#       （pr-mode / guard-destructive / validate-claude-config。各テストの summary 行も検査する）
+# 内容: 設定 JSON（settings.json・opencode/・codex/・devin/）の構文、シェルスクリプトの構文、
+#       hooks/lib/*.awk の構文、SKILL.md / agents の frontmatter、
+#       settings.json のフック・statusLine の登録元検査、
+#       フックと共通指示の配布のテーブル駆動テスト
+#       （pr-mode / guard-destructive / verify-gate / validate-claude-config / ai-install / codex-guard / grok-compat / git-pull。
+#         各テストの summary 行も検査する）
 # 環境変数 HOOKS_DIR を指定すると、別の場所にあるフック（作業コピー）をテストできる
 set -u
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,8 +17,13 @@ export HOOKS_DIR
 status=0
 
 echo "== 構文チェック =="
-if jq empty "$CLAUDE_DIR/settings.json" 2>/dev/null; then echo "  ✓ settings.json"; else echo "  ✗ settings.json: JSON が不正"; status=1; fi
-for f in "$HOOKS_DIR"/*.sh "$CLAUDE_DIR/setup.sh" "$CLAUDE_DIR"/skills/*/scripts/*.sh "$TESTS_DIR"/*.sh "$REPO_DIR/bootstrap.sh" "$HOOKS_DIR"/lib/*.awk; do
+# 各CLIの設定 JSON（コメント不可の素の JSON だけを対象にする）
+for j in "$CLAUDE_DIR/settings.json" "$REPO_DIR"/opencode/*.json "$REPO_DIR/codex/hooks.json" "$REPO_DIR/devin/config.json"; do
+  [ -f "$j" ] || continue
+  if jq empty "$j" 2>/dev/null; then echo "  ✓ ${j#$REPO_DIR/}"; else echo "  ✗ ${j#$REPO_DIR/}: JSON が不正"; status=1; fi
+done
+for f in "$HOOKS_DIR"/*.sh "$HOOKS_DIR"/lib/*.sh "$CLAUDE_DIR/setup.sh" "$CLAUDE_DIR"/skills/*/scripts/*.sh "$TESTS_DIR"/*.sh \
+  "$REPO_DIR/bootstrap.sh" "$REPO_DIR"/ai/*.sh "$REPO_DIR"/codex/hooks/*.sh "$REPO_DIR/opencode/setup.sh" "$HOOKS_DIR"/lib/*.awk; do
   [ -f "$f" ] || continue
   case "$f" in
     # awk は -f で読み込ませるだけで構文検査になる（/dev/null 入力なので本体は動かない）
@@ -34,6 +42,41 @@ for f in "$CLAUDE_DIR"/skills/*/SKILL.md "$CLAUDE_DIR"/agents/*.md; do
     echo "  ✗ ${f#$CLAUDE_DIR/}: frontmatter（1 行目の --- / 閉じる --- / name: / description:）が不正"; status=1
   fi
 done
+
+# settings.json のフック・statusLine の登録元検査。外部アプリが ~/.claude/settings.json（=このリポジトリ）へ
+# 黙ってフックを書き込んでも、validate-claude-config.sh は Claude 自身の編集しか見ないため気づけない。
+# 許すのは「bash $HOME/.claude/hooks/<実在するスクリプト>」と、下の許可リストに載せた外部ツールだけ。
+# 新しいツールを採用するときは、中身を確認してから許可リストに足す。
+# 外部ツールはコマンドへの部分一致で許す（Orca は版が上がるとコマンド文が変わるため完全一致にしない）。
+# 想定する脅威は「外部アプリが黙って書き込む」ことで、settings.json を意図的に改ざんできる相手は対象外
+ALLOWED_EXTERNAL_HOOKS='/.orca/agent-hooks/claude-hook'            # Orca（エージェント管理アプリ）。Orca 外では何もしない
+ALLOWED_EXTERNAL_STATUSLINE='/.orca/agent-hooks/claude-statusline'  # 同上
+SETTINGS="$CLAUDE_DIR/settings.json"
+# jq が失敗した（hooks の構造が壊れている・式の誤り）ときは「何も見つからなかった」と区別して失敗にする
+src_err=""
+unknown=$(jq -r --arg ext "$ALLOWED_EXTERNAL_HOOKS" '
+  .hooks // {} | to_entries[] | .key as $e | .value[] | (.matcher // "") as $m | .hooks[]
+  | select(((.type == "command") and ((.command // "") | test("^bash \\$HOME/\\.claude/hooks/[A-Za-z0-9_.-]+\\.sh$"))) | not)
+  | select(((.type == "command") and ((.command // "") | contains($ext))) | not)
+  | "    \($e)(\($m)): type=\(.type) \((.command // .url // .prompt // "") | tostring | .[0:80])"' "$SETTINGS" 2>&1) \
+  || { src_err="hooks の走査"; unknown=""; }
+cmds=$(jq -r '.hooks // {} | .[][] | .hooks[] | select(.type == "command") | .command // ""' "$SETTINGS" 2>&1) \
+  || { src_err="${src_err:+${src_err}・}フックスクリプトの列挙"; cmds=""; }
+missing=$(printf '%s\n' "$cmds" | sed -n 's|^bash \$HOME/\.claude/hooks/\([A-Za-z0-9_.-]*\.sh\)$|\1|p' | sort -u \
+  | while IFS= read -r h; do [ -f "$CLAUDE_DIR/hooks/$h" ] || printf '    hooks/%s\n' "$h"; done)
+sl=$(jq -r --arg ext "$ALLOWED_EXTERNAL_STATUSLINE" \
+  '.statusLine // empty | select((.command // "") | contains($ext) | not) | "    \((.command // "") | .[0:80])"' "$SETTINGS" 2>&1) \
+  || { src_err="${src_err:+${src_err}・}statusLine の検査"; sl=""; }
+if [ -n "$src_err" ]; then
+  echo "  ✗ settings.json の登録元検査で jq が失敗しました（${src_err}。hooks / statusLine の構造が壊れていないか確認する）"; status=1
+elif [ -z "$unknown$missing$sl" ]; then
+  echo "  ✓ settings.json のフック・statusLine はすべて既知の登録元"
+else
+  status=1
+  [ -z "$unknown" ] || printf '  ✗ settings.json に登録元が不明なフックがあります（外部ツールの書き込みなら中身を確認し、採用するなら run.sh の許可リストに足す）:\n%s\n' "$unknown"
+  [ -z "$missing" ] || printf '  ✗ settings.json が参照するフックスクリプトが存在しません:\n%s\n' "$missing"
+  [ -z "$sl" ] || printf '  ✗ settings.json の statusLine が許可リストにない登録元です:\n%s\n' "$sl"
+fi
 
 echo "== フックのテスト（HOOKS_DIR=${HOOKS_DIR}）=="
 out="${TMPDIR:-/tmp}/claude-tests-$$.out"   # 一時出力はリポジトリ内に作らない

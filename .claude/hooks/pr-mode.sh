@@ -2,8 +2,11 @@
 
 # /pr モード管理フック（Claude Code / Grok CLI）
 # ユーザーが /pr を実行しているターンの間だけ、git commit / git push /
-# gh pr create を許可する。それ以外の場面では同コマンドを実行前に拒否する。
+# gh pr create（別名 gh pr new）/ gh pr edit を許可する。
+# それ以外の場面では同コマンドを実行前に拒否する。
 # gh pr merge は常に ask。force push は /pr 中でも deny。
+# /pr 中でも、サブエージェントからの git 書き込み（入力に agent_id がある）は deny、
+# コミットされる差分に既知のトークン形式があるコミット（lib/scan-secrets.sh が検査）は ask。
 #
 # Claude Code:
 # - UserPromptExpansion: command_name が "pr" ならフラグ作成、別コマンドなら削除
@@ -134,9 +137,25 @@ stripped_or_raw() {
   printf '%s' "$st"
 }
 
+# 生文字列で見る判定（bash -c "git commit" のようにシェルへ文字列で渡す形）用に、
+# HEREDOC 本文だけを取り除いた生文字列を返す。引用符とその中身は残す。
+# HEREDOC 本文は bash が実行しない「書き込まれるファイルの中身」なので、本文に出てくる
+# eval や git commit の語を実コマンドと誤認しないために除く（スクリプトを heredoc で
+# 書き出すだけのコマンドが拒否される誤検知を防ぐ）。
+# keepq 版は引用符の中の空白を \001 に置き換えるので、語として見られるよう空白へ戻す。
+# 取り除きに失敗したら生文字列を返す（fail-open にしない）
+raw_no_heredoc() {
+  local out
+  [ -f "$STRIP_AWK" ] || { printf '%s' "$1"; return; }
+  out=$(printf '%s\n' "$1" | awk -v keepq=1 -f "$STRIP_AWK" 2>/dev/null | tr '\001' ' ') || { printf '%s' "$1"; return; }
+  if [ -z "$out" ] && [ -n "$1" ]; then printf '%s' "$1"; return; fi
+  printf '%s' "$out"
+}
+
 # 除去後の文字列にコミット・push・PR作成が含まれるか（引数: 生コマンド, 除去後）
 is_git_write() {
-  local raw="$1" s="$2"
+  local raw="$1" s="$2" rawh
+  rawh=$(raw_no_heredoc "$raw")
   # 行継続（\ + 改行）を結合し、改行は区切り ";" にして 1 行で判定する
   s=${s//\\$'\n'/ }
   s=${s//$'\n'/;}
@@ -145,7 +164,8 @@ is_git_write() {
   # 末尾は空白・行末のほか ; & | ) も区切りとして扱う（"git push;" / "(git push)" / "{ git push; }" の形）。
   # コマンド語直前の \（\git のエイリアス回避）も許す
   local re="(^|[[:space:];&|(\`])${wrap}([^[:space:]]*/)?\\\\?git[[:space:]]+${gitopt}(commit|push)([[:space:];&|)<>]|\$)"
-  local re_gh="(^|[[:space:];&|(\`])${wrap}([^[:space:]]*/)?\\\\?gh[[:space:]]+pr[[:space:]]+create([[:space:];&|)<>]|\$)"
+  # PR の作成（create / 別名 new）と更新（edit）を同じ扱いにする
+  local re_gh="(^|[[:space:];&|(\`])${wrap}([^[:space:]]*/)?\\\\?gh[[:space:]]+pr[[:space:]]+(create|new|edit)([[:space:];&|)<>]|\$)"
   # gh api は /pulls エンドポイントへの書き込み（-X POST/PUT/PATCH、または -f / -F / --input による暗黙の POST）
   # だけを PR 作成とみなす。GET（PR 一覧・/pulls/N/comments 等の取得）は拒否しない
   local re_api="(^|[[:space:];&|(\`])${wrap}([^[:space:]]*/)?\\\\?gh[[:space:]]+api[[:space:]]+[^;&|]*[^[:space:];&|]*/pulls([[:space:]]|\$)"
@@ -157,20 +177,45 @@ is_git_write() {
   fi
   # GraphQL の createPullRequest mutation（クエリは引用符の中なので生文字列で見る。
   # gh api / graphql の文脈にあるときだけ。grep createPullRequest のような読み取りでは発動しない）
-  case "$s" in *gh*api* | *graphql*) case "$raw" in *createPullRequest*) return 0 ;; esac ;; esac
+  case "$s" in *gh*api* | *graphql*) case "$rawh" in *createPullRequest*) return 0 ;; esac ;; esac
   # 引用符・HEREDOC・パイプでシェルに文字列を渡す形（bash -c "…" / sh -c / eval … / bash <<EOF / … | sh）は
   # リテラル判定ができないので生文字列で見る。単語としての eval / sh だけを対象にし、
   # "eval" を含むファイル名等（tests/eval, evaluate）や ssh では発動しない
-  if printf '%s\n' "$raw" | grep -Eq -- '(^|[[:space:];&|(`])(eval[[:space:]]|([^[:space:]]*/)?(ba|z|da|k)?sh[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-[A-Za-z]*c[A-Za-z]*([[:space:]]|$)|([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]*<<)|\|[[:space:]]*([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]|$)'; then
-    case "$raw" in *'git commit'* | *'git push'* | *'gh pr create'*) return 0 ;; esac
+  if printf '%s\n' "$rawh" | grep -Eq -- '(^|[[:space:];&|(`])(eval[[:space:]]|([^[:space:]]*/)?(ba|z|da|k)?sh[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-[A-Za-z]*c[A-Za-z]*([[:space:]]|$)|([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]*<<)|\|[[:space:]]*([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]|$)'; then
+    # HEREDOC やパイプでシェルに流す形（bash <<EOF / … | sh）は、本文そのものが実行されるので生文字列で見る。
+    # それ以外（bash -c "…" / eval "…"）は引用符の中に実コマンドがあり、HEREDOC 本文は実行されないので
+    # 本文を除いた版で見る（スクリプトを heredoc で書き出すだけのコマンドの誤検知を防ぐ）
+    local hay="$rawh"
+    if printf '%s\n' "$rawh" | grep -Eq -- '(^|[[:space:];&|(`])([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]*<<|\|[[:space:]]*([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]|$)'; then
+      hay="$raw"
+    fi
+    case "$hay" in *'git commit'* | *'git push'* | *'gh pr create'* | *'gh pr new'* | *'gh pr edit'*) return 0 ;; esac
   fi
   return 1
+}
+
+# コミットされる差分に既知のトークン形式があるか調べ、「ファイル名（形式名）」の一覧を返す
+# （lib/scan-secrets.sh に委譲。一致が無ければ空）。-a / -am のときは git diff HEAD を見る。
+# スクリプトが無い・cwd が分からないときは空を返す（この検査は多層防御の一層で、網羅は追わない）
+secret_hits() {
+  local raw="$1" scan cwd mode=staged
+  scan="$(dirname "$SELF")/lib/scan-secrets.sh"
+  [ -f "$scan" ] || return 0
+  cwd=$(printf '%s' "$input" | jq -r '.cwd // ""')
+  [ -n "$cwd" ] || return 0
+  printf '%s\n' "$raw" | grep -Eq -- '(^|[[:space:]])(-[A-Za-z]*a[A-Za-z]*|--all)([[:space:]]|$)' && mode=all
+  # 複数件は「、」で連結する（paste -d は区切りをバイト単位で扱い、全角文字では壊れる）
+  bash "$scan" "$cwd" "$mode" 2>/dev/null | awk 'NR > 1 { printf "、" } { printf "%s", $0 } END { if (NR) print "" }'
 }
 
 # /pr 中の自動承認対象か（引数: 生コマンド）。対象なら 0
 is_auto_approvable() {
   local raw="$1" s rest flat
-  case "$raw" in "git push" | "git push "* | "gh pr create" | "gh pr create "* | "git commit "*) ;; *) return 1 ;; esac
+  case "$raw" in
+    "git push" | "git push "* | "git commit "* \
+    | "gh pr create" | "gh pr create "* | "gh pr new" | "gh pr new "* | "gh pr edit "*) ;;
+    *) return 1 ;;
+  esac
 
   s=$(strip_cmd "$raw")
   # 許容する定型だけ判定前に取り除く: "$(cat <<'EOF'" と 2>&1 系
@@ -216,9 +261,11 @@ is_auto_approvable() {
     "git commit"*)
       case "$flat" in *--no-verify* | *--amend*) return 1 ;; esac
       printf '%s\n' "$flat" | grep -Eq -- '(^|[[:space:]])-[A-Za-z]*n[A-Za-z]*([[:space:]]|$)' && return 1
+      # コミットされる差分に既知のトークン形式があれば自動承認しない（確認ダイアログに落とす）
+      [ -n "$(secret_hits "$raw")" ] && return 1
       ;;
-    "gh pr create"*)
-      # 別リポジトリへの作成（-R / --repo）は /pr の対象外なので確認ダイアログに落とす
+    "gh pr create"* | "gh pr new"* | "gh pr edit"*)
+      # 別リポジトリ宛（-R / --repo）は /pr の対象外なので確認ダイアログに落とす
       printf '%s\n' "$flat" | grep -Eq -- '(^|[[:space:]])(-R|--repo)([[:space:]=]|$)' && return 1
       ;;
   esac
@@ -307,7 +354,7 @@ case "$event" in
     case "$cmd" in
       *claude-pr-mode-*)
         case "$cmd" in
-          *"git commit"*|*"git push"*|*"gh pr create"*|*"gh pr merge"*) ;;
+          *"git commit"*|*"git push"*|*"gh pr create"*|*"gh pr new"*|*"gh pr edit"*|*"gh pr merge"*) ;;
           *)
             emit_pre_deny 'pr-mode フラグはフック以外が作成・変更してはならない'
             exit 0
@@ -320,6 +367,23 @@ case "$event" in
       exit 0
     fi
     if [ -f "$flag" ]; then
+      # サブエージェントからの git 書き込みは /pr 中でも拒否する（フラグはセッション単位で、
+      # 同じ session_id で届くサブエージェントの実行まで自動承認してしまわないように）
+      agent=$(printf '%s' "$input" | jq -r '.agent_id // .agentId // empty')
+      if [ -n "$agent" ] && is_git_write "$cmd" "$(stripped_or_raw "$cmd")"; then
+        emit_pre_deny 'コミット・push・PR の作成と更新はメインセッションが直接実行してください（サブエージェントからは実行できません）。'
+        exit 0
+      fi
+      # コミット直前に、コミットされる差分の秘密情報を検査する（一致があれば自動承認しない）
+      case "$cmd" in
+        "git commit"*)
+          hits=$(secret_hits "$cmd")
+          if [ -n "$hits" ]; then
+            emit_pre_ask "コミットされる差分に秘密情報の形式が見つかりました: ${hits}。該当ファイルを add から外すか、ユーザーに確認してください。"
+            exit 0
+          fi
+          ;;
+      esac
       # /pr 中: 自動承認条件を満たすものだけ素通し。満たさない git 書き込みは
       # Claude は PermissionRequest に委ね、Grok（PermissionRequest 無し）は ask
       if [ -n "${GROK_HOOK_EVENT:-}" ] && is_git_write "$cmd" "$(stripped_or_raw "$cmd")" && ! is_auto_approvable "$cmd"; then
