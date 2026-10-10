@@ -50,7 +50,8 @@
 # - gh pr create: 別リポジトリ宛（-R / --repo）を含まない
 # - 引用符を含むトークン（"--force" / --for"ce" / -"f" / "main" / ma'in'）は、引用符を取り除いた形が
 #   オプション（- で始まる）か main / master 宛なら落とす（引用符の中身は除去されるので、
-#   引用符を残した版のトークンごとに見る）。push の引数に変数（$BRANCH）を含まない
+#   引用符を残した版のトークンごとに見る。main / master の検査は git push / git commit だけで、
+#   gh pr の --base "main" は落とさない）。push の引数に変数（$BRANCH）を含まない
 # - 除去処理が失敗した・引用符が閉じていない場合は複合扱い（安全側）。
 #   拒否判定側は逆に、除去に失敗したら生文字列で判定する（fail-open にしない）
 #
@@ -232,15 +233,18 @@ is_auto_approvable() {
   # 引用符の中身は除去済みなので、引用符付き・引用符で割ったオプション（"--force" / --for"ce" / -"f"）と
   # 引用された main / master（"main" / ma'in' / "HEAD:main"）は引用符を残した版をトークンごとに見る:
   # 引用符を含むトークンは、引用符を取り除いた形がオプション（- で始まる）か main / master 宛なら落とす
-  # （引用符の中の空白は \001 なので、"docs: --amend の説明" のようなメッセージは 1 トークンのまま）
-  local kq tok nq
+  # （引用符の中の空白は \001 なので、"docs: --amend の説明" のようなメッセージは 1 トークンのまま）。
+  # main / master 宛の検査は git push / git commit だけに掛ける（gh pr create / new / edit の
+  # --base "main" はマージ先の指定で、デフォルトブランチへの書き込みではない）
+  local kq tok nq check_main=1
+  case "$raw" in "gh pr "*) check_main=0 ;; esac
   kq=$(printf '%s\n' "$raw" | awk -v keepq=1 -f "$STRIP_AWK" 2>/dev/null | tr '\n' ' ')
   set -f
   for tok in $kq; do
     nq=${tok//[\"\']/}
     [ "$tok" = "$nq" ] && continue
     case "$nq" in -*) set +f; return 1 ;; esac
-    printf '%s\n' "$nq" | grep -Eq -- '(^|[:/])(main|master)$' && { set +f; return 1; }
+    [ "$check_main" -eq 1 ] && printf '%s\n' "$nq" | grep -Eq -- '(^|[:/])(main|master)$' && { set +f; return 1; }
   done
   set +f
   case "$raw" in

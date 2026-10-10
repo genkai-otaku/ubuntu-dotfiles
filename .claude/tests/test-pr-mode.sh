@@ -92,6 +92,13 @@ pr B48 allow "$S_ON" 'git push origin feat/main-fix'
 echo "#   別リポジトリへの PR 作成"
 pr B49 none "$S_ON" 'gh pr create -R other/repo --title t --body b'
 pr B4A none "$S_ON" 'gh pr create --repo other/repo --fill'
+echo "#   gh pr のマージ先指定（--base \"main\"）は引用符付きでも自動承認する（main / master 宛の検査は git push / commit だけ）"
+pr B4B allow "$S_ON" 'gh pr create --base "main" --title "t" --body "b"'
+pr B4C allow "$S_ON" "gh pr create -B 'master' --fill"
+pr B4D allow "$S_ON" 'gh pr edit 12 --base "main"'
+pr B4E allow "$S_ON" 'gh pr new --base "main" --fill'
+pr B4F none "$S_ON" 'gh pr create "--base" main --fill'          # 引用符付きオプションは今までどおり落とす
+pr B4G none "$S_ON" 'gh pr create --base "main" -R other/repo --fill'
 echo "#   引用符付きオプション・変数入りの宛先"
 pr B70 none "$S_ON" 'git push origin "main"'
 pr B71 none "$S_ON" 'git commit -m x "--amend"'
@@ -111,6 +118,8 @@ pr B79 none "$S_ON" 'git push -"f"' "$REPO_FEAT"
 pr B7A none "$S_ON" 'git push origin ma"in"' "$REPO_FEAT"
 pr B7B none "$S_ON" "git push origin ma'in'" "$REPO_FEAT"
 pr B7C none "$S_ON" 'git commit -m x --am"end"'
+pr B7F none "$S_ON" 'git push origin "HEAD:main"' "$REPO_FEAT"
+pr B7G none "$S_ON" "git push -u origin 'master'" "$REPO_FEAT"
 echo "#   引用符の中で実行されるコマンド置換（バッククォート・非引用タグ HEREDOC）"
 pr B7D none "$S_ON" 'git commit -m "`rm -rf /`"'
 pr B7E none "$S_ON" $'git commit -m "$(cat <<EOF\nsubject $(rm -rf /x)\nEOF\n)"'
