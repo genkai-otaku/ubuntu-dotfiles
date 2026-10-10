@@ -1,6 +1,6 @@
 ---
 name: pr
-description: ユーザーが /pr と打ったときだけ、変更をコミットして GitHub へ Pull Request を作成する。自然言語の「PRを出して」では使わない。
+description: ユーザーが /pr と打ったときだけ、変更をコミットして GitHub へ Pull Request を作成する（既に open な PR があれば説明を作り直して更新する）。自然言語の「PRを出して」では使わない。
 disable-model-invocation: true
 allowed-tools:
   - Bash(git status:*)
@@ -16,6 +16,7 @@ allowed-tools:
   - Bash(gh repo view:*)
   - Bash(gh pr view:*)
   - Bash(gh pr list:*)
+  - Bash(git restore --staged:*)
 ---
 
 <!-- 下の見出し行は pr-mode.sh が /pr の展開本文を見分けるために読む。H1 を無くさないこと -->
@@ -29,12 +30,13 @@ allowed-tools:
 ## 前提（機構上の制約）
 
 - このスキルはユーザーの `/pr` 指示によってのみ実行する。「PRを出して」では実行せず、`/pr` と打つよう案内する
-- それ以外で git commit / git push / gh pr create を実行してはならない（`hooks/pr-mode.sh` が実行前に拒否する）
+- それ以外で git commit / git push / gh pr create（別名 `gh pr new`）/ gh pr edit を実行してはならない（`hooks/pr-mode.sh` が実行前に拒否する）
 - `claude-pr-mode-*` フラグを自分で作ってはならない
-- **自動承認は単一コマンドに限る**。`git commit` / `git push` / `gh pr create` は必ず **1つずつ独立した Bash 呼び出しで実行**し、`&&` `;` `|` や改行で他のコマンド（`git add` や `git checkout -b` を含む）と繋がない。複合コマンド・コマンド置換（`$( )`）・リダイレクトはフックが自動承認せず確認に落ちる。例外は本文を渡す `"$(cat <<'EOF' … EOF\n)"` の定型だけ
+- **自動承認は単一コマンドに限る**。`git commit` / `git push` / `gh pr create` / `gh pr edit` は必ず **1つずつ独立した Bash 呼び出しで実行**し、`&&` `;` `|` や改行で他のコマンド（`git add` や `git checkout -b` を含む）と繋がない。複合コマンド・コマンド置換（`$( )`）・リダイレクトはフックが自動承認せず確認に落ちる。例外は本文を渡す `"$(cat <<'EOF' … EOF\n)"` の定型だけ
 - **ターンを終えない**。ターンが終わると Stop フックがフラグを消し、次のターンのコミット・push は拒否される。途中でユーザーに確認が必要なときは **AskUserQuestion**（Grok は `ask_user_question`）で質問する。やむを得ずテキスト応答でターンを終える場合は「回答後にもう一度 /pr を実行してください」と必ず添える
-- git commit / git push / gh pr create は**メインセッションが直接実行**し、サブエージェントへ委譲しない（フラグはセッション単位なので別セッション扱いで拒否される）
-- `--no-verify` / `--amend` / force push / `--delete` / デフォルトブランチへの push はフックが自動承認しない。使わない
+- git commit / git push / gh pr create / gh pr edit は**メインセッションが直接実行**し、サブエージェントへ委譲しない（サブエージェントからの実行はフック入力の `agent_id` で見分けられ、`/pr` 中でも拒否される）
+- `--no-verify` / `--amend` / force push / `--delete` / デフォルトブランチへの push・別リポジトリ宛（`-R` / `--repo`）はフックが自動承認しない。使わない
+- コミットの直前に、フックがコミットされる差分（`-a` 付きなら `git diff HEAD`、無ければステージ済み）を既知のトークン形式（GitHub / Anthropic / OpenAI / xAI / AWS / Slack / Google / Stripe / npm のキー、秘密鍵ブロック）で検査する。一致があれば自動承認されず、理由にファイル名と形式名が出る。その場合は該当ファイルを add から外すか、ユーザーに確認する
 - Claude: `/pr` 中だけ `pr-mode.sh` が ask を自動許可。フラグ無しは deny。`gh pr merge` は自動許可しない
 - Grok: 確認ダイアログは通常出ない。PreToolUse が `/pr` 中だけ通し、それ以外は deny。force push は /pr 中でも deny。自動許可対象外の git 書き込みは ask（always-approve でも確認になる）
 
@@ -70,7 +72,10 @@ allowed-tools:
 
 - **関心ごと**に分ける（例: キーボード設定、マウス設定、エディタ設定、スキル文書）。同じ意図で同時に必要なファイル（設定とその説明ドキュメントなど）は同じコミットに置く
 - 実質1関心しかない差分は無理に分割しない
-- 今回の作業と無関係な変更が混ざっている場合は、**AskUserQuestion で**含めてよいか確認する（ターンを終えない）
+- **単位はファイルまで**。`git add -p` 等で1ファイルの変更を分割しない。1ファイルが複数の関心にまたがる場合は主な関心のコミットにまとめ、そのことを報告に書く
+- **順序**は、各コミットがその時点で単体で成り立つよう、依存される側（土台）から先にコミットする。一緒に変えないと壊れるもの（/pr フローの四層、フックとそのテスト等）は必ず同じコミットにする
+- **進め方**: 最初に `git diff --staged --name-only` を確認し、ステージ済みのファイルがあれば `git restore --staged <ファイル>` で外してから（index だけの操作で作業ツリーは変わらない。`--worktree` / `-W` は付けない）、コミットごとに `git add <ファイル…>` → `git commit` を繰り返す。最後に `git status` で取り残しが無いことを確認する
+- 今回の作業と無関係な変更が混ざっている場合や分け方に迷う場合は、**AskUserQuestion で**確認する（ターンを終えない）
 
 メッセージ:
 
@@ -90,15 +95,18 @@ EOF
 ### 4. Push と PR 作成
 
 - `git push -u origin <ブランチ名>` で push する（単独の Bash 呼び出し）
-- 手順 1 で既に open な PR があれば、新規作成せず URL を報告して終了する（push で PR は更新されている）
-- `gh pr create` で PR を作成する（単独の Bash 呼び出し）
+- 手順 1 で既に open な PR が**無ければ**、`gh pr create` で PR を作成する（単独の Bash 呼び出し）
   - タイトル：変更内容の要約（日本語）
   - 本文：変更の概要と変更点、コミットの関心ごとの箇条書き。後からエージェントが PR 本文から該当コミットへ辿れるようにする。`--body "$(cat <<'EOF' … EOF\n)"` の HEREDOC で渡す。ハーネスの指示でフッター（`🤖 Generated with …`）を付ける場合は末尾に置く
   - `--base` はデフォルトブランチ。`.github/pull_request_template.md` があればその構成に従う
+- 既に open な PR が**あれば**、新規作成せず、push で増えたコミットが説明に反映されるようタイトルと本文を作り直して更新する
+  - `gh pr view <番号> --json commits --jq '.commits[].messageHeadline'` で PR に含まれる**全コミット**を GitHub 側から取り（ローカルの `origin/<デフォルトブランチ>` は fetch していないと古く、`git log origin/<デフォルトブランチ>..HEAD` では PR の実際のコミット集合とずれる）、上の `gh pr create` と同じ基準で作り直す（今回分の追記ではなく全体の作り直し。後から目的が増えた PR でもタイトルと食い違わないようにするため）
+  - 先に `gh pr view <番号> --json title,body` で現在の内容を読み、/pr が生成していない記述（ユーザーが書いたレビュー依頼・関連 Issue・補足など）があれば作り直した本文にも残す
+  - `gh pr edit <番号> --title "<タイトル>" --body "$(cat <<'EOF' … EOF\n)"` で更新する（単独の Bash 呼び出し）
 
 ### 5. 報告
 
-作成した PR の URL・ブランチ名・コミット内容・検証結果（未検証ならその旨）を簡潔に報告する。
+作成（既存 PR なら更新）した PR の URL・ブランチ名・コミットの一覧（分け方の意図と、複数の関心にまたがるためまとめたファイルがあればそれ）・検証結果（未検証ならその旨）を簡潔に報告する。
 
 ## 注意事項
 

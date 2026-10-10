@@ -1,0 +1,70 @@
+{
+  "read_config_from": {
+    "agents_standard": true,
+    "claude": false,
+    "cursor": false,
+    "windsurf": false
+  },
+  "permissions": {
+    "deny": [
+      "Exec(sudo)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.config/gh/hosts.yml)",
+      "Read(~/.claude/claude-notify.json)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)"
+    ],
+    "ask": [
+      "Exec(git commit)",
+      "Exec(git push)",
+      "Exec(git reset)",
+      "Exec(git clean)",
+      "Exec(git restore)",
+      "Exec(git rebase)",
+      "Exec(git branch -D)",
+      "Exec(git stash drop)",
+      "Exec(gh pr create)",
+      "Exec(gh pr edit)",
+      "Exec(gh pr merge)",
+      "Exec(gh api)",
+      "Exec(rm)",
+      "Exec(mv)",
+      "Exec(chmod)",
+      "Exec(chown)",
+      "Exec(pkill)",
+      "Exec(killall)",
+      "Exec(apt)",
+      "Exec(apt-get)",
+      "Exec(snap)",
+      "Exec(npm install -g)",
+      "Exec(pnpm add -g)",
+      "Exec(pip install --user)",
+      "Exec(pipx install)",
+      "Exec(cargo install)",
+      "Exec(gem install)",
+      "Exec(go install)",
+      "Exec(nix profile)",
+      "Exec(nix-env)",
+      "Exec(home-manager)"
+    ],
+    "allow": [
+      "Read(**)",
+      "Exec(git status)",
+      "Exec(git diff)",
+      "Exec(git log)",
+      "Exec(git show)",
+      "Exec(git branch)",
+      "Exec(gh pr view)",
+      "Exec(gh pr list)",
+      "Exec(jq)",
+      "Exec(rg)",
+      "Exec(nix develop)",
+      "Exec(nix eval)",
+      "Exec(direnv exec)"
+    ]
+  }
+}

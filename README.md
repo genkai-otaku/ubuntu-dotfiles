@@ -1,7 +1,7 @@
 # dotfiles
 
 ## 概要
-Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、tmux（iPhone SSH切断後も grok を残す）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Code / Grok / OpenCodeの共通AIエージェント設定（指示・スキル・コマンド・権限）を管理する。`.claude/`はClaude CodeとGrok向け、`opencode/`はOpenCode向けのグローバル設定で、home-managerがそれぞれの設定ディレクトリへリンクする。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLI・OpenCode、外出先のiPhoneからTailscale経由でSSHするためのOpenSSH / Tailscaleは`bootstrap.sh`が導入する。tmux本体はNix、SSH時の自動attachは`.zshrc`。
+Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、tmux（iPhone SSH切断後も grok を残す）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Code / Grok / OpenCode / Codex / Devin の共通AIエージェント設定（指示・スキル・コマンド・権限・フック）を管理する。グローバル指示の実体は `ai/`（共通コア＋CLI別差分）の1か所で、`ai/install.sh` が各CLIへ配る。`.claude/`はClaude CodeとGrok向け、`opencode/`はOpenCode向け、`codex/`・`devin/`はそれぞれのCLI向けの設定で、home-managerが各設定ディレクトリへリンクする。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLI・OpenCode・Codex CLI・Devin CLI、外出先のiPhoneからTailscale経由でSSHするためのOpenSSH / Tailscaleは`bootstrap.sh`が導入する。tmux本体はNix、SSH時の自動attachは`.zshrc`。
 
 ## 技術スタック
 - Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`。CLIツールとGNOMEデスクトップのdconf設定の両方を含む）
@@ -10,9 +10,12 @@ Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する
 - VSCode / Cursor（`vscode/`配下の共通設定をhome-manager経由で書き込み可能リンクし、拡張機能をactivation時に自動導入）
 - direnv / nix-direnv（`nix/home.nix`のhome-manager設定で導入。`.envrc`のあるプロジェクトディレクトリでflakeのdevShellを自動ON/OFF）
 - Bash（`bootstrap.sh`、`.claude/setup.sh`、`.claude/hooks/`配下のシェルスクリプト）
-- Claude Code（`settings.json` / `AGENTS.md` / Skills / Hooksによるグローバル設定管理）
-- Grok CLI（xAI。`grok/config.toml`と`grok/AGENTS.md`をhome-manager経由で書き込み可能リンク。本体は`bootstrap.sh`が公式インストーラーで導入）
-- OpenCode（`opencode/`のAGENTS.md / Skills / Commands / permissions / CLI設定をhome-manager経由でリンク。本体は公式インストーラーで導入）
+- 全CLI共通のグローバル指示（`ai/core.md` ＋ CLI別差分。`ai/install.sh` が Claude Code へはリンク、OpenCode / Grok / Codex / Devin へは連結生成で配る。詳細は`ai/README.md`）
+- Claude Code（`settings.json` / Skills / Agents / Hooksによるグローバル設定管理）
+- Grok CLI（xAI。`grok/config.toml`をhome-manager経由で書き込み可能リンク。グローバル指示は`ai/`から連結生成。本体は`bootstrap.sh`が公式インストーラーで導入）
+- OpenCode（`opencode/`のSkills / Commands / permissions / CLI設定をhome-manager経由でリンク。本体は公式インストーラーで導入）
+- Codex CLI（OpenAI。`codex/config.toml`・`codex/hooks.json`・`codex/hooks/guard.sh`・`codex/prompts/pr.md`をhome-manager経由でリンク。本体は`bootstrap.sh`が公式インストーラーで導入）
+- Devin CLI（Cognition。`devin/config.json`をhome-manager経由でリンク。本体は`bootstrap.sh`が公式インストーラーで導入）
 - Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Claude/GrokのStop・NotificationとOpenCode V2の実行成功時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
 - GitHub Actions（`.github/workflows/`配下で共通ワークフローを管理し、他リポジトリへ配布）
 - GitHub CLI（`gh`、`/pr`スキル内でPR作成に使用）
@@ -34,14 +37,28 @@ dotfiles/
 ├── git/
 │   ├── README.md
 │   └── .gitconfig         # gitconfigの実体（home.nixが~/.gitconfigへ書き込み可能リンク。user.name/emailは~/.gitconfig.localに手動配置）
+├── ai/                    # 全CLI共通のグローバル指示（実体はここ1か所）
+│   ├── README.md          # 各CLIの読み込み規則と配り方・重複を避ける方針
+│   ├── core.md            # 共通ルール（言語・Git・削除・検証・レビューの範囲・秘密情報・Nix・サブエージェント・compact）
+│   ├── claude.md          # Claude Code固有（モデル運用とレビューのモデル分離・フックの挙動）
+│   ├── grok.md            # Grok固有
+│   ├── opencode.md        # OpenCode固有
+│   ├── codex.md           # Codex固有
+│   ├── devin.md           # Devin固有
+│   └── install.sh         # 各CLIのグローバル指示ファイルへ配布（リンク or 連結生成。switch時にも自動実行）
 ├── grok/
 │   ├── README.md
-│   ├── config.toml        # Grok CLI（xAI）の設定実体（home.nixが~/.grok/config.tomlへ書き込み可能リンク）
-│   └── AGENTS.md          # Grokのグローバル指示（Grok固有の補足のみ。共通ルールは~/.claude/CLAUDE.mdが読まれる）
+│   └── config.toml        # Grok CLI（xAI）の設定実体（home.nixが~/.grok/config.tomlへ書き込み可能リンク）
+├── codex/
+│   ├── config.toml        # Codex CLIの設定（承認ポリシー・サンドボックス）
+│   ├── hooks.json         # Codexのフック登録（UserPromptSubmit / PreToolUse / Stop / SessionEnd）
+│   ├── hooks/guard.sh     # /pr 外のコミット・push・PR操作と危険な操作を拒否（拒否専用）
+│   └── prompts/pr.md      # Codexの /pr プロンプト（手順は .claude/skills/pr/SKILL.md を読ませる）
+├── devin/
+│   └── config.json        # Devin CLIの設定（permissions・他ツールのルール読み込みの可否）
 ├── opencode/
 │   ├── README.md          # OpenCode設定とClaude/Grokとの共有範囲
-│   ├── AGENTS.md          # OpenCodeのグローバル共通指示
-│   ├── opencode.json      # 権限設定（秘密情報・Git・破壊的操作等）
+│   ├── opencode.json      # Skillのソースと権限設定（秘密情報・Git・破壊的操作等）
 │   ├── cli.json           # TUI設定（ダークテーマ・権限確認・OS通知）
 │   ├── plugins/mobile-notify.js # タスク成功時にiPhoneへWeb Push通知
 │   ├── agents/            # /code-review が起動するread-onlyレビューAgent
@@ -80,9 +97,7 @@ dotfiles/
 │   ├── README.md         # iPhone側の接続手順とUbuntu側の残作業
 │   └── setup.sh          # OpenSSH / Tailscale を冪等に導入（bootstrap と home-manager switch から実行）
 └── .claude/
-    ├── global-instructions.md # 全プロジェクト向け指示の実体。setup.sh が ~/.claude/CLAUDE.md にリンク（二重読込を避ける）
-    ├── rules/orchestration.md # Claude Code 専用のモデル振り分け（Grok は読まない）
-    ├── settings.json      # フック・permissions・languageなどの設定
+    ├── settings.json      # フック・permissions・env・languageなどの設定
     ├── setup.sh           # .claude/ 配下（gitが管理するファイル）を ~/.claude へシンボリックリンク
     ├── dev-roots          # 削除・作業ディレクトリ作成の許可ルートの唯一の定義
     ├── claude-notify.example.json # iPhoneプッシュ通知設定のテンプレート（~/.claude/claude-notify.json へコピー）
@@ -90,8 +105,11 @@ dotfiles/
     │   ├── notify.sh                 # Stop/Notification時にiPhoneへWeb Push通知
     │   ├── pr-mode.sh                # /pr 実行中だけgit操作を自動許可、それ以外は拒否
     │   ├── guard-destructive.sh      # 回復不能な操作（rm -rf・破壊的git操作等）を止める
+    │   ├── verify-gate.sh            # dotfilesの検証コマンドを通すまでターンを終えさせない
     │   ├── validate-claude-config.sh # 設定ファイル編集直後の構文検証
-    │   └── lib/strip-shell.awk       # 引用符・HEREDOC除去の共通ライブラリ
+    │   ├── lib/strip-shell.awk       # 引用符・HEREDOC除去の共通ライブラリ
+    │   └── lib/scan-secrets.sh       # コミットされる差分の既知のトークン形式を検査（pr-mode.shが呼ぶ）
+    ├── agents/Explore.md  # 読み取り専用の探索エージェント（haiku固定。組み込みを上書き）
     ├── skills/
     │   ├── pr/SKILL.md            # /pr スキル
     │   ├── readme/SKILL.md        # /readme スキル
@@ -107,7 +125,7 @@ dotfiles/
 ```zsh
 curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/bootstrap.sh | bash
 ```
-`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用（tmux・`.tmux.conf`・SSH時の自動attach、Claude Code / Grok / OpenCodeの設定リンクを含む）、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code / Grok / OpenCode CLIの導入、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、OpenSSHサーバーとTailscaleの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、各AIツールの認証、`sudo tailscale up`、iPhoneのTailscale / SSHアプリ等）は[nix/README.md](/nix/README.md)と[ssh-tailscale/README.md](/ssh-tailscale/README.md)を参照。tmuxは追加作業なし（SSHした時点で入る）。
+`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用（tmux・`.tmux.conf`・SSH時の自動attach、Claude Code / Grok / OpenCode / Codex / Devinの設定リンクと、`ai/install.sh`による共通指示の配布を含む）、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code / Grok / OpenCode / Codex / Devin CLIの導入（取得や実行に失敗したCLIは警告して飛ばし、最後に一覧で再掲する）、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、OpenSSHサーバーとTailscaleの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、各AIツールの認証、`sudo tailscale up`、iPhoneのTailscale / SSHアプリ等）は[nix/README.md](/nix/README.md)と[ssh-tailscale/README.md](/ssh-tailscale/README.md)を参照。tmuxは追加作業なし（SSHした時点で入る）。
 
 ### Nix環境の適用・更新（2回目以降）
 ```zsh
@@ -120,6 +138,12 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ```
 `.claude/`配下のうちgitが管理するファイル（`setup.sh`・`README.md`・`tests/` 等の除外分を除く）が`~/.claude`へシンボリックリンクされる（`home-manager switch`時にはactivationからも自動実行される）。
+
+### 全CLI共通のグローバル指示の配布
+```zsh
+bash ~/Dev/kaishi/ubuntu-dotfiles/ai/install.sh
+```
+`ai/core.md`（共通ルール）と`ai/<cli>.md`（CLI別差分）を各CLIへ配る。Claude Codeは`~/.claude/CLAUDE.md`・`~/.claude/rules/claude.md`へのリンクなので編集が即反映され、OpenCode / Grok / Codex / Devinは`~/.config/opencode/AGENTS.md`・`~/.grok/AGENTS.md`・`~/.codex/AGENTS.md`・`~/.config/devin/AGENTS.md`への連結生成なので`ai/`を編集したら再実行する（`home-manager switch`時にも自動実行される）。詳細は[ai/README.md](/ai/README.md)。
 
 ### OpenCode
 
@@ -152,7 +176,8 @@ nix flake update
 
 ### セットアップスクリプト
 - `bash .claude/setup.sh`：`.claude/`配下（gitが管理するファイルのみ）を`~/.claude`へシンボリックリンク
-- `bash .claude/tests/run.sh`：`.claude/`の構文チェック、git-pullの一時リポジトリ統合テスト、フック（pr-mode・guard-destructive・validate-claude-config）のテーブル駆動テスト。test-pr-mode.sh は HOME を隔離するので本物の `~/.claude/pr-mode.log` は増えない。`.claude/`を変更したら必ず通す
+- `bash ai/install.sh`：`ai/`の共通指示を各CLIへ配布（冪等。`ai/`を変更したら実行する）
+- `bash .claude/tests/run.sh`：各CLI設定JSON（`settings.json`・`opencode/`・`codex/`・`devin/`）とシェル・awkの構文チェック、SKILL.md / agents の frontmatter、`settings.json`のフック・statusLineの登録元検査、git-pullの一時リポジトリ統合テスト、フック（pr-mode・guard-destructive・verify-gate・validate-claude-config）と共通指示配布（ai-install）のテーブル駆動テスト。test-pr-mode.sh は HOME を隔離するので本物の `~/.claude/pr-mode.log` は増えない。`.claude/`・`ai/`・`codex/`・`devin/`・`opencode/`を変更したら必ず通す
 - `nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath`：`flake.nix` / `nix/`の評価エラーと`git add`漏れを検出（`switch`の前に流す）
 - `.claude/dev-roots`（削除・作業ディレクトリの許可ルート。1行1パス・`~/`始まり・`#`から行末はコメント）を変更したときは、`git add .claude/dev-roots`のうえで上記を実行し、`bash .claude/setup.sh`も再実行する
 - `bash vscode/install-extensions.sh`：`vscode/extensions.txt`の拡張機能をVSCode/Cursorへ導入（`home-manager switch`時にも自動実行される。冪等）
@@ -174,6 +199,7 @@ cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
 - [zsh](/zsh/README.md)
 - [VSCode](/vscode/README.md)
 - [git](/git/README.md)
+- [全CLI共通のグローバル指示（ai/）](/ai/README.md)
 - [Grok](/grok/README.md)
 - [OpenCode](/opencode/README.md)
 - [Claude Code](/.claude/README.md)

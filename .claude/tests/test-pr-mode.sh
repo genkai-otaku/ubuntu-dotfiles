@@ -268,4 +268,71 @@ report E07-log-message-not-garbled ok "$r" ""
 grep -qF 'session_id が無いイベント（Stop）を無視しました' "$HOME/.claude/pr-mode.log" 2>/dev/null && r=ok || r="文言が一致しない"
 report E07b-log-message-with-event ok "$r" ""
 
+echo "# F. gh pr new / gh pr edit（PR の更新）"
+pr F01 allow "$S_ON" 'gh pr edit 12 --title "t" --body "b"'
+pr F02 allow "$S_ON" 'gh pr new --fill'
+pr F03 none "$S_ON" 'gh pr edit 12 -R other/repo --title t'
+pr F04 none "$S_ON" 'gh pr edit 12 --repo other/repo --body b'
+pre F05 deny "$S_OFF" 'gh pr edit 12 --body b'
+pre F06 deny "$S_OFF" 'gh pr new --fill'
+pre F07 deny "$S_OFF" '\gh pr edit 12 --title x'
+pre F08 none "$S_OFF" 'gh pr view 12 --json body'
+pre F09 none "$S_OFF" 'gh pr list --state open'
+
+echo "# G. HEREDOC でスクリプトを書き出すだけのコマンドは拒否しない（本文は実行されない）"
+pre G01 none "$S_OFF" $'cat > /tmp/x.sh <<\'EOF\'\neval "set -- $fields"\ncase $c in *"git commit"*) ;; esac\nEOF\nchmod +x /tmp/x.sh'
+pre G02 none "$S_OFF" $'cat > /tmp/x.sh <<\'EOF\'\n# bash -c "git push" の例\nEOF'
+pre G03 none "$S_OFF" $'cat > /tmp/x.sh <<\'EOF\'\neval "x"\ngh pr edit 1 --body b\nEOF'
+# シェルに流す HEREDOC・パイプは本文そのものが実行されるので従来どおり deny
+pre G04 deny "$S_OFF" $'bash <<\'EOF\'\ngit push origin main\nEOF'
+pre G05 deny "$S_OFF" 'bash -c "git commit -m x"'
+pre G06 deny "$S_OFF" "printf 'git push' | bash"
+
+echo "# H. /pr 中のサブエージェント・秘密情報"
+# サブエージェント（入力に agent_id）からの git 書き込みは /pr 中でも deny
+out=$(jq -cn --arg s "$S_ON" '{hook_event_name:"PreToolUse",session_id:$s,cwd:"/tmp",agent_id:"agent-1",tool_name:"Bash",tool_input:{command:"git commit -m x"}}' | bash "$HOOK" 2>/dev/null)
+report H01-subagent-deny deny "$(decision_of "$out")" "$out"
+out=$(jq -cn --arg s "$S_ON" '{hook_event_name:"PreToolUse",session_id:$s,cwd:"/tmp",agent_id:"agent-1",tool_name:"Bash",tool_input:{command:"git status"}}' | bash "$HOOK" 2>/dev/null)
+report H02-subagent-readonly none "$(decision_of "$out")" "$out"
+# ステージ済みの差分に既知のトークン形式があるコミットは自動承認しない（PreToolUse は理由つき ask）。
+# 実物のトークン形式をこのファイルに残さないよう、値は実行時に組み立てる
+REPO_SEC="$T/claude-prmode-secret-repo.$$"; rm -rf "$REPO_SEC"
+git init -q "$REPO_SEC" 2>/dev/null
+TOK="ghp_$(printf 'A%.0s' $(seq 36))"
+printf 'token = "%s"\n' "$TOK" > "$REPO_SEC/leak.txt"
+printf 'ok\n' > "$REPO_SEC/clean.txt"
+git -C "$REPO_SEC" add clean.txt 2>/dev/null
+out=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -m "add"' "" "" "$REPO_SEC")
+report H03-clean-commit none "$(decision_of "$out")" "$out"
+git -C "$REPO_SEC" add leak.txt 2>/dev/null
+out=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -m "add"' "" "" "$REPO_SEC")
+report H04-secret-ask ask "$(decision_of "$out")" "$out"
+out=$(run_hook "$HOOK" PermissionRequest "$S_ON" 'git commit -m "add"' "" "" "$REPO_SEC")
+report H05-secret-no-auto-allow none "$(decision_of "$out")" "$out"
+# 理由文にファイル名と形式名がそのまま入る（文字化けしない）
+r=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""')
+out2=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -m "add"' "" "" "$REPO_SEC")
+r=$(printf '%s' "$out2" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""')
+case "$r" in *'leak.txt（GitHub トークン）'*) v=ok ;; *) v="理由文が一致しない: $r" ;; esac
+report H06-secret-reason ok "$v" "$r"
+# 2 件以上でも「、」で連結される（paste のバイト単位の区切りでの文字化け検出）
+TOK2="sk-ant-$(printf 'B%.0s' $(seq 24))"
+printf 'key = "%s"\n' "$TOK2" > "$REPO_SEC/leak2.txt"
+git -C "$REPO_SEC" add leak2.txt 2>/dev/null
+out2=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -m "add"' "" "" "$REPO_SEC")
+r=$(printf '%s' "$out2" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""')
+case "$r" in *'leak.txt（GitHub トークン）、leak2.txt（Anthropic API キー）'*) v=ok ;; *) v="連結が壊れている: $r" ;; esac
+report H07-secret-reason-joined ok "$v" "$r"
+# -a 付きコミットは未ステージの変更（git diff HEAD）も検査する
+printf 'npm_%s\n' "$(printf 'C%.0s' $(seq 36))" > "$REPO_SEC/unstaged.txt"
+git -C "$REPO_SEC" add unstaged.txt 2>/dev/null
+# HOME を隔離しているので、コミットには identity を明示的に渡す
+git -C "$REPO_SEC" -c user.name=test -c user.email=test@example.com commit -q -m init 2>/dev/null
+printf 'npm_%s\n' "$(printf 'D%.0s' $(seq 36))" >> "$REPO_SEC/unstaged.txt"
+out2=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -am "x"' "" "" "$REPO_SEC")
+report H08-secret-commit-a ask "$(decision_of "$out2")" "$out2"
+out2=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -m "x"' "" "" "$REPO_SEC")
+report H09-unstaged-not-checked none "$(decision_of "$out2")" "ステージしていない変更は -a が無ければ見ない"
+rm -rf "$REPO_SEC"
+
 summary "pr-mode.sh"

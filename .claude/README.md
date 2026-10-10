@@ -9,13 +9,15 @@
 | ファイル | 役割 |
 | :--- | :--- |
 | `settings.json` | Claude Code の設定（フック・言語・effortLevel・permissions など） |
-| `global-instructions.md` | グローバル指示の実体（言語・Git操作の制限・変更後の検証・秘密情報・パッケージインストールの制限・サブエージェント）。setup.sh が `~/.claude/CLAUDE.md` にリンクする。Claude / Grok 共通で、リポジトリ内のプロジェクト指示として二重検出されない |
-| `rules/orchestration.md` | Claude Code 専用のモデル振り分け。Grok は `compat.claude.rules = false` で読まない |
+| （グローバル指示） | 実体はリポジトリの [`ai/`](../ai/README.md)。`ai/install.sh` が `~/.claude/CLAUDE.md` → `ai/core.md`（全CLI共通）、`~/.claude/rules/claude.md` → `ai/claude.md`（Claude Code 固有のモデル運用とフックの挙動）のリンクを張る。`.claude/setup.sh` の配布対象ではない |
 | `hooks/notify.sh` | Stop / Notification 時に iPhone へプッシュ通知するフック（送信本体は `claude-notify/send-push.mjs`）。Claude / Grok |
 | `hooks/pr-mode.sh` | `/pr` 実行中だけ git commit / push / PR作成を自動許可し、それ以外は実行前に拒否するフック（Claude / Grok） |
 | `hooks/guard-destructive.sh` | 回復不能な操作（ルート・ホーム直下の削除、破壊的git操作等）を機構的に止めるフック |
+| `hooks/verify-gate.sh` | dotfiles の検証対象ファイルを編集したセッションで、対応する検証コマンド（`bash .claude/tests/run.sh` / `nix eval`）が成功するまでターンを終えさせないフック |
 | `hooks/validate-claude-config.sh` | `~/.claude` 配下の設定ファイル編集直後にJSON構文・シェル構文・frontmatterを検証するフック |
 | `hooks/lib/strip-shell.awk` | シェルコマンド文字列から引用符の中身とHEREDOC本文を除去する共通ライブラリ（pr-mode.sh・guard-destructive.shが利用） |
+| `hooks/lib/scan-secrets.sh` | コミットされる差分の追加行を既知のトークン形式で検査する（pr-mode.sh が `/pr` 中のコミットを自動承認する直前に呼ぶ） |
+| `agents/Explore.md` | 組み込みの Explore を上書きする読み取り専用の探索エージェント定義（`model: haiku` 固定・`omitClaudeMd` でグローバル指示を読ませない） |
 | `dev-roots` | Claude Code が確認なしで削除・移動できる作業ルートの**唯一の定義**（1行1パス、`~/` 始まり、`#` から行末はコメント、前後の空白と末尾の `/` は無視、`~/` 始まり以外の行は読まれない）。`hooks/guard-destructive.sh`・`nix/home.nix`（`devDirs`）・`tests/test-guard-destructive.sh` が同じ読み方で読む。変更したら `git add` すること（flakeはgit追跡ファイルしか読まない） |
 | `skills/readme/SKILL.md` | `/readme` スキル：READMEを最新状態に更新（なければ新規作成） |
 | `skills/pr/SKILL.md` | `/pr` スキル：変更をコミット・pushしてGitHubにPRを作成。`disable-model-invocation: true` でユーザー起動限定 |
@@ -24,7 +26,7 @@
 | `skills/git-pull/SKILL.md` | `/git-pull` スキル：直下の各リポジトリを `main` に切り替えてfast-forward-onlyでpull（変更があるリポジトリはスキップ） |
 | `claude-notify.example.json` | iPhoneプッシュ通知（claude-notify）設定のテンプレート |
 | `setup.sh` | `.claude/` 配下（gitが管理するファイルのみ）を `~/.claude` へシンボリックリンクするスクリプト |
-| `tests/` | git-pull の一時リポジトリ統合テストとフックのテーブル駆動テスト（pr-mode / guard-destructive / validate-claude-config / Grok 互換）。一括実行は `bash .claude/tests/run.sh`（配布対象外） |
+| `tests/` | git-pull の一時リポジトリ統合テスト、フックのテーブル駆動テスト（pr-mode / guard-destructive / verify-gate / validate-claude-config / Grok 互換 / Codex の `codex/hooks/guard.sh`）、共通指示の配布テスト（ai-install）。一括実行は `bash .claude/tests/run.sh`（配布対象外） |
 
 ## セットアップ（反映方法）
 
@@ -32,7 +34,7 @@
 bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ```
 
-`.claude/` 配下でgitが認識しているファイル（追跡済み＋未追跡かつ`.gitignore`対象外。gitが使えない環境では`find`にフォールバックし、除外リストだけで秘密ファイル等を守る）が `~/.claude` へシンボリックリンクされる。通常は同じディレクトリ構成だが、`global-instructions.md` だけは `~/.claude/CLAUDE.md` にリンクして、Grokがこれをプロジェクトルールとして再読込するのを防ぐ。以後はこのリポジトリを編集するだけで全プロジェクトに即反映される（コピー作業は不要）。
+`.claude/` 配下でgitが認識しているファイル（追跡済み＋未追跡かつ`.gitignore`対象外。gitが使えない環境では`find`にフォールバックし、除外リストだけで秘密ファイル等を守る）が `~/.claude` へシンボリックリンクされる。ディレクトリ構成はそのまま再現される。グローバル指示（`~/.claude/CLAUDE.md` と `~/.claude/rules/claude.md`）は全CLI共通の [`ai/`](../ai/README.md) が実体なので、こちらではなく `bash ai/install.sh` が配る。以後はこのリポジトリを編集するだけで全プロジェクトに即反映される（コピー作業は不要）。
 
 - **ファイルを追加したら再実行するだけ**でリンクされる（スクリプトの修正は不要）
 - `skills/` や `commands/` などのディレクトリを作れば、そのまま `~/.claude` 配下に反映され、Claude / Grok で使える
@@ -53,11 +55,14 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ## settings.json
 
 - `permissions.deny`：`~/.claude/claude-notify.json`・`~/.claude/history.jsonl` に加え、SSH秘密鍵・AWS認証情報・`gh` の hosts.yml・Docker設定・`.netrc`・GPG鍵・kubeconfig・`.npmrc`・主要な `.env` 変種（`.env.example` は除く。一覧は settings.json）などの秘密ファイルの読み取りと `sudo` の実行を禁止（詳細は settings.json）
-- `permissions.ask`：`git commit` / `git push` / `gh pr create` / `gh pr merge` に加え、`apt` / `snap`・`npm install -g` 系・`pip install --user`・`pipx`・`uv tool install`・`cargo` / `gem` / `go install`・`nix profile` / `nix-env`・`home-manager` など、プロジェクト外へ恒久的な変更を及ぼすコマンドを実行前に必ず確認（詳細は settings.json）。Grok の always-approve でもシェルの ask ルールは効く
-- `hooks`：`UserPromptExpansion` / `UserPromptSubmit` / `PreToolUse`(Bash) / `PermissionRequest`(Bash) / `Stop` で `hooks/pr-mode.sh`、`PreToolUse`(Bash) で `hooks/guard-destructive.sh`、`PostToolUse`(Edit|Write|NotebookEdit|write|search_replace) で `hooks/validate-claude-config.sh`、`Stop` / `Notification`(matcher: `permission_prompt`) で `hooks/notify.sh`。Grok の matcher `Bash` は `run_terminal_command` にも当たる
+- `permissions.ask`：`git commit` / `git push` / `gh pr create` / `gh pr new` / `gh pr edit` / `gh pr merge` に加え、`apt` / `snap`・`npm install -g` 系・`pip install --user`・`pipx`・`uv tool install`・`cargo` / `gem` / `go install`・`nix profile` / `nix-env`・`home-manager` など、プロジェクト外へ恒久的な変更を及ぼすコマンドを実行前に必ず確認（詳細は settings.json）。Grok の always-approve でもシェルの ask ルールは効く
+- `hooks`：`UserPromptExpansion` / `UserPromptSubmit` / `PreToolUse`(Bash) / `PermissionRequest`(Bash) / `Stop` で `hooks/pr-mode.sh`、`PreToolUse`(Bash) で `hooks/guard-destructive.sh`、`PostToolUse`(Edit|Write|NotebookEdit|write|search_replace) で `hooks/validate-claude-config.sh` と `hooks/verify-gate.sh`、`PostToolUse`(Bash) / `Stop` で `hooks/verify-gate.sh`、`Stop` / `Notification`(matcher: `permission_prompt`) で `hooks/notify.sh`。Grok の matcher `Bash` は `run_terminal_command` にも当たる
+  - `PreToolUse` の `hooks/pr-mode.sh`・`hooks/guard-destructive.sh` には `onFailure: "block"` を付けている。**外さないこと**（外すと安全装置が壊れたとき＝起動不能・タイムアウト・想定外の exit コードのときに黙って素通りになる）。代償として、フックのファイルが消える・壊れると全 Bash が止まる
+  - Orca（エージェント管理アプリ）が書き込んだフックと `statusLine`（コマンドに `orca` を含むもの）は外部ツール由来なので手で編集しない。`tests/run.sh` が「登録元が `bash $HOME/.claude/hooks/<実在するスクリプト>` か許可リストの外部ツールか」を検査し、知らない登録元が増えたら落ちる
+- `env.CLAUDE_CODE_SUBAGENT_MODEL`：`opus`（サブエージェントの既定モデル。振り分けは `ai/claude.md`）
 - `skipWorkflowUsageWarning`：`true`
 - `theme`：`dark`
-- `model`：`claude-fable-5-1`
+- `model`：`/model` で Claude Code 自身が書き換えるため現在値は転記しない（実際の値は settings.json を参照）
 - `language`：`japanese`
 - `effortLevel`：`/effort` や `/config` で Claude Code 自身が書き換えるため、このREADMEには現在値を転記しない（実際の値は settings.json を参照。差分はコミットするだけでよい）
 - `tui`：`fullscreen`
@@ -68,7 +73,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 ユーザーが `/pr` と打つまで、Claude / Grok はコミット・push・PR作成を行わない。自然言語の「PRを出して」では起動しない。`/pr` 実行中は確認なしで一気にPR作成まで進む。
 
 - `skills/pr/SKILL.md` の `disable-model-invocation: true`：`/pr` はユーザー起動限定で、Claude がスキルを自動起動すること自体を機構的に禁止
-- `global-instructions.md`：`/pr` の指示があるまで `git commit` / `git push` / `gh pr create` を実行しないよう指示（Claude が試みること自体を抑止）
+- `ai/core.md`（`~/.claude/CLAUDE.md`）：`/pr` の指示があるまで `git commit` / `git push` / `gh pr create` / `gh pr new` / `gh pr edit` を実行しないよう指示（Claude が試みること自体を抑止）
 - `settings.json` の `permissions.ask`：万一実行しようとしても必ず確認ダイアログが出る強制レイヤー
 - `hooks/pr-mode.sh`：`/pr` を送信したターンの間だけフラグを立て、対象コマンドを自動許可する。判定は `PreToolUse`(Bash) の deny と `PermissionRequest`(Bash) の allow の二段構え
   - `UserPromptExpansion`：スラッシュコマンド展開時、コマンド名が `pr` ならフラグ作成、別コマンドなら削除
@@ -77,16 +82,18 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
   - `PermissionRequest`(Bash)：Claude のみ。フラグがあれば対象コマンドを `behavior: allow` で自動承認する（PreToolUse の allow では `permissions.ask` を上書きできないため、ask ダイアログの代替はここで行う）。フラグが無い場合も deny を返すが、これは PreToolUse が無効な環境向けの二重化
   - `Stop`：ターン終了時にフラグ削除
 
-自動承認の対象は「`git commit` / `git push` / `gh pr create` で始まる単一コマンド」に限る：
+自動承認の対象は「`git commit` / `git push` / `gh pr create`（別名 `gh pr new`）/ `gh pr edit` で始まる単一コマンド」に限る：
 
 - 複合コマンド・改行区切り・コマンド置換（`$( )` / `` ` ``）・リダイレクト（`2>&1` は許容）を含む場合は自動承認せず確認ダイアログに落とす。引用符の中身と HEREDOC 本文は `hooks/lib/strip-shell.awk`（引用符の種別を追跡する状態機械）で除去してから判定するため、PR本文中の演算子リテラルなどを誤検知しない（ただし二重引用符の中のバッククォート置換と、引用符無しタグの HEREDOC 本文にある `$( )` / バッククォートは bash が実際に実行するので判定対象に残す）
 - `git push` は force系（`--force*` / `-f` を含む短縮オプション群 / `+refspec`）・削除系（`--delete` / `-d` / `:branch`）・`--mirror`・`--no-verify`・`--prune`・`--all`・`--tags`・`main` / `master` 宛の push（`HEAD:main` / `feat:refs/heads/main` の refspec 形も含む）、および現在ブランチが `main` / `master` の場合の push を自動承認しない
 - `git commit` は `--no-verify` / `-n` を含む短縮オプション群 / `--amend` を自動承認しない
-- `gh pr create` は別リポジトリ宛（`-R` / `--repo`）を自動承認しない
+- `gh pr create` / `gh pr new` / `gh pr edit` は別リポジトリ宛（`-R` / `--repo`）を自動承認しない
+- `git commit` は、コミットされる差分（`-a` 付きなら `git diff HEAD`、無ければステージ済み）に既知のトークン形式（`hooks/lib/scan-secrets.sh` が GitHub / Anthropic / OpenAI / xAI / AWS / Slack / Google / Stripe / npm のキーと秘密鍵ブロックを検査）があれば自動承認せず、ファイル名と形式名を理由にして ask にする
+- サブエージェントからの git 書き込み（フック入力に `agent_id` がある）は `/pr` 中でも deny（フラグはセッション単位なので、同じ `session_id` で届くサブエージェントの実行まで自動承認しないため）
 - 引用符を含むトークンは、引用符を取り除いた形が `-` で始まるオプション（`"--force"` / `--for"ce"` / `-"f"` / `--am"end"`）か `main` / `master` 宛（`ma"in"` / `"HEAD:main"`）なら自動承認しない。`git push` の引数の変数（`$BRANCH`）も同様（引用符の中身は除去して判定するため、引用符を残した版をトークン単位で別途見る）
 - `gh pr merge` は対象外で常に確認ダイアログ
 
-/pr 外での拒否判定は `git commit` / `git push` / `gh pr create`（`/usr/bin/git` / `\git` / `command \git` / `env X=1 git` のようなエイリアス回避・絶対パスの形も含む）に加え、`gh api` の `/pulls` への書き込み（`-X POST` や `-f` / `--input` による暗黙の POST）と GraphQL の `createPullRequest`（`gh api` / `graphql` の文脈にあるものだけ。`grep createPullRequest` のような単なる文字列一致では拒否しない）を対象にする。`gh api` の GET（PR 一覧・`/pulls/N/comments` の取得など）は拒否しない。`bash -c "…"` / `eval` / `bash <<EOF` / `… | sh` のようにシェルへ文字列を渡す形は生文字列で見る。引用符の除去に失敗したとき（awk が読めない等）は生文字列で判定し、fail-open にしない。
+/pr 外での拒否判定は `git commit` / `git push` / `gh pr create`（`/usr/bin/git` / `\git` / `command \git` / `env X=1 git` のようなエイリアス回避・絶対パスの形も含む）に加え、`gh api` の `/pulls` への書き込み（`-X POST` や `-f` / `--input` による暗黙の POST）と GraphQL の `createPullRequest`（`gh api` / `graphql` の文脈にあるものだけ。`grep createPullRequest` のような単なる文字列一致では拒否しない）を対象にする。`gh api` の GET（PR 一覧・`/pulls/N/comments` の取得など）は拒否しない。`bash -c "…"` / `eval` / `bash <<EOF` / `… | sh` のようにシェルへ文字列を渡す形は生文字列で見る（ただし `bash -c` / `eval` のときは HEREDOC 本文を除いた生文字列で見る。`cat > x.sh <<'EOF' … EOF` のようにスクリプトを書き出すだけのコマンドは、本文に `eval` や `git commit` の語があっても bash は実行しないため拒否しない。シェルに流す HEREDOC・パイプは本文そのものが実行されるので従来どおり本文を見る）。引用符の除去に失敗したとき（awk が読めない等）は生文字列で判定し、fail-open にしない。
 
 フラグは `session_id` 単位のため、git操作はメインセッションが直接実行する（サブエージェントに委譲すると別セッション扱いで拒否される）。`session_id` が取れない `PreToolUse` / `PermissionRequest` はフラグの所在が分からず `/pr` 中と確認できないため、フラグ無し（拒否側）として扱う（fail-open にしない）。Stop でフラグが消えるため、`/pr` の途中でターンを終えて質問すると次ターンは拒否される。そのため `/pr` スキルは途中の確認に AskUserQuestion ツールを使う（`SKILL.md` に明記）。
 
@@ -98,7 +105,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 
 判定は 4 段構造で、上から順に評価して最初に決まった deny で終了する。ask は保留して最後に 1 つだけ出す（`killall …; rm -rf ~/Documents` のように ask 対象と deny 対象が混ざったコマンドが ask へ格下げされないように）：
 
-1. **致命 deny**（生文字列で判定するので引用符の中でも止まる。`eval` / `sh -c` / `… | sh` / `bash <<EOF` のようにシェルへ文字列を渡す形では、その文字列を bash が実行するので元のコマンド文字列全体にも同じ判定を掛ける。`bash -c "rm -rf ~"` は deny）：ルート・ホーム直下の `rm`、`~/.claude` および dotfiles の `.claude` を対象にした `rm` / `mv`（`settings.json`・`global-instructions.md`・`~/.claude/CLAUDE.md` は単一ファイルの `rm` でも止める）、`.claude` 配下の設定実体（`hooks` / `skills` / `agents` 等）の再帰削除・移動、`curl|sh` 等のリモートスクリプトのパイプ実行（多段パイプ・`bash <(curl …)`・`sh -c "$(curl …)"`・`eval "$(curl …)"`・`source <(curl …)` / `. <(curl …)` の形も含む）、ディスク操作（`diskutil erase` / `apfs delete`・`dd of=/dev/`・`mkfs` 等）
+1. **致命 deny**（生文字列で判定するので引用符の中でも止まる。`eval` / `sh -c` / `… | sh` / `bash <<EOF` のようにシェルへ文字列を渡す形では、その文字列を bash が実行するので元のコマンド文字列全体にも同じ判定を掛ける。`bash -c "rm -rf ~"` は deny）：ルート・ホーム直下の `rm`、`~/.claude` および dotfiles の `.claude` を対象にした `rm` / `mv`（`settings.json`・`~/.claude/CLAUDE.md`・`ai/core.md`・`ai/claude.md`・`ai/install.sh` は単一ファイルの `rm` でも止める）、`.claude` 配下の設定実体（`hooks` / `skills` / `agents` 等）と `ai/`（全CLI共通のグローバル指示）の再帰削除・移動、`curl|sh` 等のリモートスクリプトのパイプ実行（多段パイプ・`bash <(curl …)`・`sh -c "$(curl …)"`・`eval "$(curl …)"`・`source <(curl …)` / `. <(curl …)` の形も含む）、ディスク操作（`diskutil erase` / `apfs delete`・`dd of=/dev/`・`mkfs` 等）
 2. **削除の範囲判定**（`rm` / `rmdir` / `unlink` / `find -delete` / `mv`。`\rm` / `/bin/rm` の表記も含む）：対象を 1 つずつ絶対パスへ解決し、`dev-roots` の各ルートと一時領域（`$TMPDIR`・`/tmp/claude-*`。`TMPDIR` 未設定時は `/tmp` 全体ではなく `/tmp/claude-*` だけ）の**内側**なら確認なしで通す。解決できて外側（`~/Dev` 直下・ホーム・その上・許可ルートそのもの）なら **deny**。解決できない書き方は理由を添えた **ask**。加えて dotfiles リポジトリ自体・`.claude` の設定実体・作業中ディレクトリ自身やその親の再帰削除は deny。相対パスは hook 入力の `cwd` 基準で解決し、glob は手前のディレクトリで判定する。カンマ区切りのブレース展開（`{dist,build}`）は bash と同じ順に展開して各パスを判定する（展開後に外へ出る `{dist,../../../Documents}` は deny）
 3. **削除語を含むが構造を解釈できない形** → **ask**：`eval` / `sh -c` / `… | sh` / `bash <<EOF` / `xargs` 経由、引用符や HEREDOC が閉じていない書き方
 4. **git / kill / chmod の ask**（必ず確認ダイアログ。auto modeでも省略されない）：作業ツリー・履歴を壊す git 操作（`reset --hard` / `clean -f` / `checkout`・`switch`・`restore` での全変更破棄（`.` 対象、`-f` / `--force` / `--discard-changes`。`restore --staged .` は index だけなので対象外）/ `branch -D` / `stash drop`・`clear` / rebase（`--continue` / `--abort` 等の進行操作は対象外）/ `pull --rebase` / `commit --amend` / `filter-branch` / `reflog expire`・`update-ref -d` / `worktree remove --force`。`git checkout -b feat/add-config` のようなブランチ名は force 系と誤認しない）、`killall` / `pkill` / `kill <sig> -1`、絶対パスへの再帰 `chmod` / `chown`、リポジトリの `.git` の `rm`
@@ -139,7 +146,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/.claude/setup.sh
 bash .claude/tests/run.sh
 ```
 
-settings.json の JSON 構文、シェルスクリプト全体の `bash -n`、`hooks/lib/*.awk` の構文、SKILL.md / agents の frontmatter（1行目の `---`・`name:`・`description:` に加え、閉じの `---` があること）、およびフック（pr-mode / guard-destructive / validate-claude-config、加えて Grok 互換の入出力）のテーブル駆動テストを数秒で実行する。guard のテストには、許可ルート内の通常の削除が確認なしで通ることを固定する不変条件セクション（IV01〜IV13）、`dev-roots` の各ルートを検査する DR1〜DR3、`dev-roots` の文法（行内コメント・空白・`~/` 以外の行）を作業コピーで検査する DC1〜DC4、ask / deny の理由文が「何をするコマンドか」で始まることを検査する X01〜X19 が含まれる。`tests/` 自体は `setup.sh` の配布対象外（`~/.claude` にはリンクされない）。test-pr-mode.sh は `HOME` を一時ディレクトリに向けて実行するので、壊れた入力や `session_id` 欠落のケースを流してもフックの本物のログ `~/.claude/pr-mode.log` には書き込まない（run.sh がテスト前後の行数で検査する。E07 はそのログの文言が文字化けしていないことも見る）。`hooks/pr-mode.sh`・`hooks/guard-destructive.sh`・`hooks/validate-claude-config.sh` を変更したときは必ず実行して通す。作業コピーのフックを試すときは `HOOKS_DIR=/path/to/hooks bash .claude/tests/run.sh`。
+各CLIの設定 JSON（`settings.json`・`opencode/*.json`・`codex/hooks.json`・`devin/config.json`）の構文、シェルスクリプト全体の `bash -n`（`hooks/`・`hooks/lib/`・`setup.sh`・`skills/*/scripts/`・`tests/`・`bootstrap.sh`・`ai/*.sh`・`codex/hooks/*.sh`・`opencode/setup.sh`）、`hooks/lib/*.awk` の構文、SKILL.md / agents の frontmatter（1行目の `---`・`name:`・`description:` に加え、閉じの `---` があること）、`settings.json` のフック・`statusLine` の登録元検査、およびフック（pr-mode / guard-destructive / verify-gate / validate-claude-config、加えて Grok 互換の入出力と Codex の `codex/hooks/guard.sh`）と共通指示の配布（ai-install）のテーブル駆動テストを実行する。guard のテストには、許可ルート内の通常の削除が確認なしで通ることを固定する不変条件セクション（IV01〜IV13）、`dev-roots` の各ルートを検査する DR1〜DR3、`dev-roots` の文法（行内コメント・空白・`~/` 以外の行）を作業コピーで検査する DC1〜DC4、ask / deny の理由文が「何をするコマンドか」で始まることを検査する X01〜X19 が含まれる。`tests/` 自体は `setup.sh` の配布対象外（`~/.claude` にはリンクされない）。test-pr-mode.sh は `HOME` を一時ディレクトリに向けて実行するので、壊れた入力や `session_id` 欠落のケースを流してもフックの本物のログ `~/.claude/pr-mode.log` には書き込まない（run.sh がテスト前後の行数で検査する。E07 はそのログの文言が文字化けしていないことも見る）。`hooks/pr-mode.sh`・`hooks/guard-destructive.sh`・`hooks/verify-gate.sh`・`hooks/validate-claude-config.sh`・`hooks/lib/` や `ai/`・`codex/`・`devin/`・`opencode/` の設定を変更したときは必ず実行して通す（`hooks/verify-gate.sh` が、通すまでターンを終えさせない）。作業コピーのフックを試すときは `HOOKS_DIR=/path/to/hooks bash .claude/tests/run.sh`。
 
 ## iPhoneプッシュ通知（claude-notify）
 

@@ -1,17 +1,19 @@
 # Grok CLI 設定
 
-Grok CLI（xAI）の設定実体。適用は [nix/home.nix](../nix/home.nix) が担い、`~/.grok/config.toml` と `~/.grok/AGENTS.md` へ書き込み可能なシンボリックリンクを張る。本体は [bootstrap.sh](../bootstrap.sh) が公式インストーラーで導入する（Claude Code と同様、常に最新版を使うためあえてNix管理外）。
+Grok CLI（xAI）の設定実体。適用は [nix/home.nix](../nix/home.nix) が担い、`~/.grok/config.toml` へ書き込み可能なシンボリックリンクを張る。グローバル指示 `~/.grok/AGENTS.md` は全CLI共通の [`ai/`](../ai/README.md) から `ai/install.sh` が連結生成する（`ai/core.md` + `ai/grok.md`）。本体は [bootstrap.sh](../bootstrap.sh) が公式インストーラーで導入する（Claude Code と同様、常に最新版を使うためあえてNix管理外）。
 
 ## ファイル構成
 
 | ファイル | 役割 |
 |---|---|
 | [`config.toml`](config.toml) | Grok CLI の設定実体（UI・marketplace・権限モード） |
-| [`AGENTS.md`](AGENTS.md) | Grok 向けグローバル指示。**Grok固有の補足のみ** |
+| [`../ai/grok.md`](../ai/grok.md) | Grok 向けグローバル指示の**差分のみ**（共通ルールは `ai/core.md`。連結して `~/.grok/AGENTS.md` を生成する） |
 
-## AGENTS.md に書くこと / 書かないこと
+## グローバル指示の構成
 
-言語・Git・Nix・検証・破壊的操作の許可ルートなどの共通ルールは、Claude互換モードが読む `~/.claude/CLAUDE.md` に任せる。同じ内容をここに複製しない。書くのは `spawn_subagent` の使い分け、Claude のモデル名を使わないこと、always-approve でも hook の ask / deny が効くこと。Claude 専用のモデル振り分けは `~/.claude/rules/` にあり、`config.toml` の `compat.claude.rules = false` で Grok は読まない。
+言語・Git・Nix・検証・レビューの範囲・破壊的操作の許可ルートなどの共通ルールは `ai/core.md` にあり、Grok 固有の差分（`spawn_subagent` の使い分け、Claude のモデル名を使わないこと、always-approve でも hook の ask / deny が効くこと）だけを `ai/grok.md` に書く。両者を連結した実体が `~/.grok/AGENTS.md`（自動生成。手で編集せず、`ai/` を直して `bash ai/install.sh`）。
+
+`config.toml` の `[compat.claude]` は `rules = false`・`agents = false` のまま運用する（`agents` は `~/.claude/` の名前付き指示ファイル＝`~/.claude/CLAUDE.md`（= `ai/core.md`）の読み込みを制御する。true に戻すと `~/.grok/AGENTS.md` と合わせて共通ルールを二重に読み、Claude 専用のモデル振り分けまで持ち込まれる）。`skills`（`~/.claude/skills/` の共有スキル）と `hooks`（`pr-mode.sh`・`guard-destructive.sh` の共有に必須）は既定の true のまま。
 
 ## 管理対象外
 

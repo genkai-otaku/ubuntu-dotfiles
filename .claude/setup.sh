@@ -2,9 +2,10 @@
 
 # Claude Code 設定ファイルのセットアップスクリプト
 # dotfiles/.claude/ 配下のファイルを $HOME/.claude にシンボリックリンクします。
-# global-instructions.md は自動検出によるプロジェクト指示との二重読込を避けるため、
-# ~/.claude/CLAUDE.md として公開します。ファイルを追加したら再実行するだけで反映されます
-# （home-manager switch 時にも activation から自動実行されます）。
+# ファイルを追加したら再実行するだけで反映されます（home-manager switch 時にも
+# activation から自動実行されます）。
+# グローバル指示（~/.claude/CLAUDE.md と ~/.claude/rules/claude.md）は全CLI共通の
+# ai/ が実体なので、こちらではなく ai/install.sh が配布します。
 #
 # 方針:
 # - 配布対象は git が知っているファイル（追跡済み＋未追跡かつ .gitignore 対象外）に限る。
@@ -31,7 +32,7 @@ is_excluded() {
     setup.sh | README.md | claude-notify.example.json) return 0 ;;   # リポジトリ管理用
     tests/* | tests) return 0 ;;                                       # フックのテスト（配布不要）
     claude-notify.json | settings.local.json) return 0 ;;             # 秘密鍵・プロジェクト固有
-    *.DS_Store | *.swp | *.swo | *~ | .#* | *.orig | *.rej | *.backup.*) return 0 ;;  # 一時・バックアップ
+    *.DS_Store | *.swp | *.swo | *~ | .#* | *.orig | *.rej | *.backup.* | *.bak) return 0 ;;  # 一時・バックアップ（*.bak は外部ツールが settings.json を書き換える前に作る）
     *) return 1 ;;
   esac
 }
@@ -95,11 +96,7 @@ echo "Claude Code 設定ファイルのセットアップを開始します..."
 while IFS= read -r -d '' src; do
   rel="${src#$SCRIPT_DIR/}"
   is_excluded "$rel" && continue
-  if [ "$rel" = "global-instructions.md" ]; then
-    dest="$CLAUDE_DIR/CLAUDE.md"
-  else
-    dest="$CLAUDE_DIR/$rel"
-  fi
+  dest="$CLAUDE_DIR/$rel"
   mkdir -p "$(dirname "$dest")" || { failed="$failed $rel"; continue; }
   link_file "$src" "$dest" || failed="$failed $rel"
 done < <(list_sources)
