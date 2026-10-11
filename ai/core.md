@@ -10,7 +10,7 @@
 
 # ファイル削除・プロセス停止
 
-- 削除は作業ルート（`~/Dev/kaishi`・`~/Dev/seino914`・`~/Dev/hobby`。定義は dotfiles の `.claude/dev-roots`）と一時領域（`$TMPDIR`・`/tmp/claude-*`）の内側だけ。対象は変数やコマンド置換ではなく具体的なパスで書き、`cd` と組み合わせない
+- 削除は作業ルート（`~/Dev/kaishi`・`~/Dev/seino914`・`~/Dev/hobby`・`~/orca/workspaces`。定義は dotfiles の `.claude/dev-roots`）と一時領域（`$TMPDIR`・`/tmp/claude-*`）の内側だけ。対象は変数やコマンド置換ではなく具体的なパスで書き、`cd` と組み合わせない
 - 開発サーバー等の停止は `pkill` / `killall` ではなく `kill $(lsof -ti :<ポート>)` か PID 指定の `kill` で行う
 
 # 変更後の検証

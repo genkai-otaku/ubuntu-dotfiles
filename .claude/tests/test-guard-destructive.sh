@@ -466,7 +466,7 @@ gr X15 'git restore .' 'git restore .'
 gr X16 'killall / pkill' 'killall node'
 gr X17 'chmod / chown -R' 'chmod -R 777 /usr/local/lib'
 gr X18 'rm …/.git' 'rm -rf .git'
-gr X19 '削除は ~/Dev/kaishi・~/Dev/seino914・~/Dev/hobby と一時領域' 'rm -rf ~/Dev/x'
+gr X19 '削除は ~/Dev/kaishi・~/Dev/seino914・~/Dev/hobby・~/orca/workspaces と一時領域' 'rm -rf ~/Dev/x'
 
 echo "#   deny の理由文が途中で切れない（UTF-8 ロケールでの \"\$r）\" の退行検出）"
 out=$(payload PreToolUse test-guard "rm $HOME/Downloads/x.zip" "" "" "$IN" | bash "$HOOK" 2>"$ERRF")
