@@ -151,7 +151,12 @@ function saveState(statePath, state) {
 }
 
 /** デバウンス判定。送信すべきなら true を返す */
-function shouldSendByDebounce(statePath, event, debounceSeconds, now = new Date()) {
+function shouldSendByDebounce(
+  statePath,
+  event,
+  debounceSeconds,
+  now = new Date()
+) {
   if (!debounceSeconds || debounceSeconds <= 0) return true;
   if (!event) return true;
 
@@ -178,7 +183,10 @@ function recordSendTime(statePath, event, now = new Date()) {
 function withTimeout(promise, ms) {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`送信がタイムアウトしました（${ms}ms）`)), ms);
+    timer = setTimeout(
+      () => reject(new Error(`送信がタイムアウトしました（${ms}ms）`)),
+      ms
+    );
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }

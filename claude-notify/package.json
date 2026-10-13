@@ -5,9 +5,14 @@
   "type": "module",
   "description": "Claude Code の hook から Web Push 通知を送る送信側スクリプト",
   "scripts": {
-    "send": "node send-push.mjs"
+    "send": "node send-push.mjs",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
   },
   "dependencies": {
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15"
   }
 }
