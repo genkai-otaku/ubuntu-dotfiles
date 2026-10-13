@@ -10,7 +10,7 @@ Codex CLIとdesktopの個人用設定。Claude Codeと共通の指示・スキ�
 | `hooks.json` | `~/.codex/hooks.json`。PR起動判定、シェル操作のガード、変更と検証の記録、終了時の検証ゲート |
 | `hooks/guard.sh` | `~/.codex/hooks/guard.sh`。明示的なPRモード以外でcommit・push・PR操作を拒否 |
 | `hooks/harness.sh` | `~/.codex/hooks/harness.sh`。Claudeの事故防止・検証ゲートをCodexのイベントへ接続 |
-| `skills/*` | `~/.agents/skills/*`。Codex用の入口から `.claude/skills/` の共通手順を読む |
+| `skills/*` | `~/.codex/skills/*`。Codex用の入口から `.claude/skills/` の共通手順を読む |
 | `prompts/pr.md` | `~/.codex/prompts/pr.md`。旧 `/prompts:pr` 入口 |
 | `../ai/core.md`・`../ai/codex.md` | `bash ai/install.sh` が `~/.codex/AGENTS.md` を連結生成 |
 
@@ -27,6 +27,8 @@ bash ai/install.sh
 home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 ```
 
+以前 `~/.agents/skills/` に配布した5つの管理リンクは、上の `home-manager switch` で `~/.codex/skills/` へ移行する。ユーザーが追加した別スキルは管理対象にしない。移行後は各CLIで新しいチャットを開始し、スキル一覧を再読み込みする。
+
 新しいCodexチャットを開始し、`/hooks` で各フックの内容を確認して信頼する。未信頼の非管理フックは実行されず、定義変更後は再確認が必要。信頼状態やハッシュはエージェントが書き換えない。[公式Hooks](https://learn.chatgpt.com/docs/hooks)
 
 操作の承認は既定で `approvals_reviewer = "auto_review"` により自動レビューへ回す。再起動後の新しいチャットで反映を確認する。フックの信頼確認は別途ユーザーが行う。[公式Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review)
@@ -39,7 +41,11 @@ home-manager switch --flake ~/Dev/kaishi/ubuntu-dotfiles#ubuntu
 | `/git-pull` | `$git-pull` |
 | `/clean-branches` | `$clean-branches` |
 
-Codexは `~/.agents/skills` のシンボリックリンクを読み、スキルは `$名前` で明示起動できる。PRだけは明示起動に限定し、自然言語の「PRを出して」では起動しない。旧custom promptは非推奨なので、新しい入口にはスキルを使う。[公式Skills](https://learn.chatgpt.com/docs/build-skills)、[公式Custom Prompts](https://learn.chatgpt.com/docs/custom-prompts)
+Codex CLI 0.162.1は従来の `$CODEX_HOME/skills`（通常は `~/.codex/skills`）をユーザースキルの互換探索先として読む。他CLIも探索する `~/.agents/skills` へCodex専用の入口を配ると、Grok・OpenCode・DevinにもCodex用の指示が混入するため、専用の探索先へ隔離する。[公式実装](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/ext/skills/src/host_roots.rs)
+
+この探索先はdeprecatedとして互換維持されているため、将来Codexの探索仕様が変わる際は配置先を再確認する。
+
+スキルは `$名前` で明示起動できる。PRだけは明示起動に限定し、自然言語の「PRを出して」では起動しない。旧custom promptは非推奨なので、新しい入口にはスキルを使う。[公式Skills](https://learn.chatgpt.com/docs/build-skills)、[公式Custom Prompts](https://learn.chatgpt.com/docs/custom-prompts)
 
 CodexのPreToolUseは拒否専用で、Claudeのフックによる自動承認は使えない。CLI 0.162.1の `exec_command` はフックの `tool_input` に `command` だけを渡し、`sandbox_permissions` は渡さない。そのため確認対象を `require_escalated` で再試行してもフックが承認情報を受け取れず、拒否が続く。対象のコマンドと理由を示し、ユーザーに手動実行を依頼する。[公式実装](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs#L514-L524)
 

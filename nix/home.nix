@@ -154,25 +154,25 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/prompts/pr.md";
       force = true;
     };
-    # Codex は個人用スキルを ~/.agents/skills から読む。ディレクトリ単位で
+    # Codex 専用の入口は従来の探索先 ~/.codex/skills へ隔離する。ディレクトリ単位で
     # 個別リンクし、ユーザーが追加した別スキルは home-manager の対象にしない
-    ".agents/skills/pr" = {
+    ".codex/skills/pr" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/pr";
       force = true;
     };
-    ".agents/skills/readme" = {
+    ".codex/skills/readme" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/readme";
       force = true;
     };
-    ".agents/skills/nix-setup" = {
+    ".codex/skills/nix-setup" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/nix-setup";
       force = true;
     };
-    ".agents/skills/git-pull" = {
+    ".codex/skills/git-pull" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/git-pull";
       force = true;
     };
-    ".agents/skills/clean-branches" = {
+    ".codex/skills/clean-branches" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/clean-branches";
       force = true;
     };

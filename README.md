@@ -55,7 +55,7 @@ dotfiles/
 │   ├── hooks.json         # Codexのフック登録（PR制限・削除ガード・変更後の検証ゲート）
 │   ├── hooks/guard.sh     # /pr 外のコミット・push・PR操作と危険な操作を拒否（拒否専用）
 │   ├── hooks/harness.sh   # Claudeの事故防止ガード・検証ゲートをCodexイベントへ接続
-│   ├── skills/            # ~/.agents/skills への個別リンク（共通手順のCodex用入口）
+│   ├── skills/            # ~/.codex/skills への個別リンク（共通手順のCodex用入口）
 │   └── prompts/pr.md      # Codexの旧 /prompts:pr 入口（新しい入口は $pr）
 ├── devin/
 │   └── config.json        # Devin CLIの設定（permissions・他ツールのルール読み込みの可否）

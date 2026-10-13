@@ -3,7 +3,7 @@
 # フックは ~/.codex/hooks.json（実体は codex/hooks.json）。
 #
 # model / model_reasoning_effort はユーザーが選ぶ。既存の値をエージェントが変更しない。
-# 個人用スキルは ~/.agents/skills（nix/home.nix で個別リンク）。
+# Codex専用スキルは ~/.codex/skills（nix/home.nix で個別リンク）。
 
 approval_policy = "on-request"   # 作業範囲内は自律実行し、範囲外の操作は承認を求める
 approvals_reviewer = "auto_review" # 承認が必要な操作は自動レビューへ回す

@@ -42,7 +42,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/ai/install.sh
 
 `home-manager switch` の activation（`nix/home.nix` の `linkAiInstructions`）でも自動実行される。生成ファイルの先頭には「自動生成（編集しない）」と実体のパスが入る。
 
-Codexの個人用スキルは `nix/home.nix` が `codex/skills/` から `~/.agents/skills/` へ個別にリンクする。`$pr`・`$readme`・`$nix-setup`・`$git-pull`・`$clean-branches` は `.claude/skills/` の共通手順を必要時に読む。Claude専用のモデル名・ツール権限はCodexへ持ち込まない。フックの信頼確認やCLIとdesktopの違いは [`../codex/README.md`](../codex/README.md) を参照。
+Codexの個人用スキルは `nix/home.nix` が `codex/skills/` から従来の互換探索先 `~/.codex/skills/` へ個別にリンクする。他CLIも探索する `~/.agents/skills/` にCodex専用の指示を置かない。`$pr`・`$readme`・`$nix-setup`・`$git-pull`・`$clean-branches` は `.claude/skills/` の共通手順を必要時に読む。Claude専用のモデル名・ツール権限はCodexへ持ち込まない。旧管理リンクからの移行と新しいチャットでの確認は [`../codex/README.md`](../codex/README.md) を参照。
 
 ## 他のCLI互換読み込みを切る理由
 
