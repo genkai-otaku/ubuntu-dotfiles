@@ -31,5 +31,6 @@
     "terminal.integrated.mouseWheelScrollSensitivity": 3,
     // AMD + Wayland で統合ターミナルの描画が欠ける／ちらつくため GPU
     // アクセラレーションを切る。auto に戻すと再発しうる
-    "terminal.integrated.gpuAcceleration": "off"
+    "terminal.integrated.gpuAcceleration": "off",
+    "claudeCode.preferredLocation": "panel"
 }
