@@ -118,7 +118,9 @@ dotfiles/
     │   ├── readme/SKILL.md        # /readme スキル
     │   ├── clean-branches/SKILL.md # /clean-branches スキル
     │   ├── nix-setup/SKILL.md     # /nix-setup スキル
-    │   └── git-pull/              # /git-pull スキルと共有スクリプト
+    │   ├── git-pull/              # /git-pull スキルと共有スクリプト
+    │   ├── opencode/              # /opencode スキル（Claude CodeからOpenCodeを非対話で起動。Claude Code専用）
+    │   └── codex/                 # /codex スキル（Claude CodeからCodexを非対話で起動。Claude Code専用）
     ├── tests/             # フックのテーブル駆動テスト（run.shで一括実行。~/.claude へは配布しない）
     └── README.md
 ```
@@ -180,6 +182,8 @@ nix flake update
 - `/clean-branches`：ローカルブランチのうちmain・develop以外を削除して整理する
 - `/nix-setup`：新規プロジェクトの開発環境をNixのdevShell + direnvでセットアップする
 - `/git-pull`：ワークスペース直下のリポジトリをmainに切り替えてfast-forward-onlyでpullする（変更中や分岐したリポジトリは保全）
+- `/opencode`：Claude Code専用。Claude CodeからOpenCodeを非対話で起動して作業を任せ（既定は `opencode-go/claude-haiku-5-5#medium`、`--auto` は使わない）、結果をClaudeがレビューする。ユーザーがOpenCodeを明示的に求めたときだけ使う
+- `/codex`：Claude Code専用。Claude CodeからCodex CLIを `codex exec` で起動して作業を任せ（既定は `gpt-6.1-sol` の medium、サンドボックスは workspace-write）、結果をClaudeがレビューする。ユーザーがCodexを明示的に求めたときだけ使う
 
 ### セットアップスクリプト
 - `bash .claude/setup.sh`：`.claude/`配下（gitが管理するファイルのみ）を`~/.claude`へシンボリックリンク

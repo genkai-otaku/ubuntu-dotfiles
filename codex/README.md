@@ -72,7 +72,7 @@ Codex CLI 0.162.1は従来の `$CODEX_HOME/skills`（通常は `~/.codex/skills`
 
 CodexのPreToolUseは拒否専用で、Claudeのフックによる自動承認は使えない。共通の事故防止ガードが確認（ask）を求める操作は、承認情報の有無にかかわらず常に拒否する。`approvals_reviewer = "auto_review"` では承認がAIの自動レビューへ回るため、`require_escalated` の再試行でユーザー確認を代替しない。対象のコマンドと理由を示し、ユーザーに手動実行を依頼する。`clean-branches` の未マージブランチ強制削除も同様に、候補の一覧と理由、手動実行するコマンドを示す。拒否対象は停止し、別の書き方やツールで迂回しない。
 
-Codexはフックがタイムアウト・失敗すると止めずにツールを実行する（Claudeの `onFailure: "block"` に当たる設定が無い）ため、PreToolUseの `harness.sh`・`guard.sh` のtimeoutは30秒にしている。
+Codexはフックがタイムアウト・失敗すると止めずにツールを実行する（Claudeの `onFailure: "block"` に当たる設定が無い）ため、PreToolUseの `harness.sh`・`guard.sh` のtimeoutは30秒にしている。SessionEndのtimeoutはCodexの上限（3秒）を超えると毎回切り詰めの警告が出るため3秒にしている（処理はフラグの削除だけ）。
 
 PRモードは起動したターンだけ有効。`Stop` で終了した後は、検証ゲートによって続行する場合も `$pr` の再起動が必要になる。PR手順では検証を先に済ませ、commit・push・PR操作が終わるまでターンを終えない。
 

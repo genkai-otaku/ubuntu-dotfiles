@@ -50,7 +50,7 @@
           {
             "type": "command",
             "command": "bash \"$HOME/.codex/hooks/guard.sh\"",
-            "timeout": 10
+            "timeout": 3
           }
         ]
       }
