@@ -5,7 +5,7 @@
 # 毎回発火する PreToolUse で、回復不能な操作を機構的に止める。
 #
 # 契約（一文）:
-#   単純な削除（単一コマンドで、コマンド置換・HEREDOC・eval を含まず、対象がすべて許可ルートか一時領域に
+#   解釈できる削除（対象のコマンド置換・HEREDOC・eval を含まず、対象がすべて許可ルートか一時領域に
 #   解決できるもの）は確認なし。致命的な対象と、解釈できたうえで許可ルート外の削除は deny。
 #   それ以外で削除語を含むものは、何をするコマンドかを説明して ask。
 #
@@ -18,10 +18,11 @@
 #   2. 削除の範囲判定 … rm / rmdir / unlink / find -delete / mv の対象を 1 つずつ解決する
 #        解決できて許可ルート（.claude/dev-roots の各行）か一時領域（$TMPDIR・/tmp/claude-*）の内側 → 通す
 #        解決できて外側（~/Dev 直下・ホーム・許可ルートそのもの）→ deny
-#        解決できない（未知の変数・コマンド置換・cd 併用の相対パス・範囲形ブレース・~user）→ 理由を添えて ask
+#        解決できない（未知の変数・コマンド置換・追跡できない cd・範囲形ブレース・~user）→ 理由を添えて ask
 #        同じコマンドで削除より前に直線的に実行される単純な代入（S=/tmp/x && rm -rf $S/w、T=$(mktemp -d)）は
 #        値で展開してから判定する。変数名が代入以外の形（read・for 等）でも現れる、条件付き・別スコープ・
 #        関数の中の削除などは解決せず ask（詳細は split_stmts の上）
+#        削除前の直線的な絶対 cd は成功が分かる && の連鎖に限って基準にする（mv は従来どおり）
 #        dotfiles 自体・.claude 配下の設定実体・作業中ディレクトリの再帰削除 → deny
 #   3. 削除語を含むが構造を解釈できない形 … eval / sh -c / … | sh / bash <<EOF / xargs 経由、
 #                    引用符や HEREDOC が閉じていない → ask
@@ -107,6 +108,31 @@ CLAUDE_CORE='(hooks|skills|agents|settings\.json|CLAUDE\.md)'
 # 削除語（引用符の中の空白は \001 なので、区切りとして \001 も許す）
 DEL_RE="(^|[[:space:];&|\"'\`(${PH}])(rm|rmdir|unlink)([[:space:]${PH}]|\$)|find[[:space:]${PH}][^\"']*-delete"
 
+# 引数に分ける。引用符・コマンド置換の中の空白は同じ引数として残す。
+# 閉じていない置換も末尾まで 1 引数にし、中身の -1 等を呼び出し元の引数にしない。
+shell_words() {
+  printf '%s' "$1" | awk '
+    function emit() { if (word != "") print word; word = "" }
+    BEGIN { q = ""; depth = 0; word = "" }
+    {
+      for (i = 1; i <= length($0); i++) {
+        c = substr($0, i, 1)
+        if (c == "\\" && q != "'"'"'") { word = word c substr($0, ++i, 1); continue }
+        if (q != "") {
+          word = word c
+          if (c == q) q = ""
+          continue
+        }
+        if (c == "'"'"'" || c == "\"" || c == "`") { q = c; word = word c; continue }
+        if (c == "(") depth++
+        if (c == ")" && depth > 0) depth--
+        if (depth == 0 && (c == " " || c == "\t")) emit()
+        else word = word c
+      }
+    }
+    END { emit() }'
+}
+
 # ---- 1. 致命 deny（生文字列で判定。引用符の中やコマンド置換の中でも止める）----
 # 引数: 対象パスを見る文字列（引用符を残し、引用符の中の空白は \001）, コマンド列を見る文字列（引用符の中身を除去済み）
 fatal_deny() {
@@ -139,6 +165,34 @@ if printf '%s' "$raw1" | grep -Eq -- "$SHELL_STR_RE"; then
   shell_string=1
   cmd1=${cmd//\\$'\n'/ }; cmd1=$(printf '%s' "$cmd1" | tr '\n' ';')
   fatal_deny "$cmd1" "$cmd1"
+fi
+
+# -c に渡すリテラルだけを切り出せる場合は、その中の削除語を見る。
+# eval・パイプ・HEREDOC・未知の値は従来どおり文字列全体を確認対象に残す。
+shell_opaque=$shell_string
+if [ "$shell_string" -eq 1 ] && [ "$parse_failed" -eq 0 ]; then
+  shell_opaque=0
+  printf '%s' "$raw1" | grep -Eq -- "${SEP}eval[[:space:]]|\|[[:space:]]*([^[:space:]]*/)?(ba|z|da|k)?sh([[:space:]]|$)|<<" && shell_opaque=1
+  while IFS= read -r shseg; do
+    [ -n "$shseg" ] || continue
+    shseg=$(printf '%s' "$shseg" | sed -E 's/^[;&|(`]?[[:space:]]*//')
+    need_body=0; got_body=0
+    while IFS= read -r word; do
+      if [ "$need_body" -eq 1 ]; then
+        got_body=1; body=""
+        case "$word" in
+          \"*\") body=${word#\"}; body=${body%\"}; case "$body" in *[\$\`\\\"]*) shell_opaque=1 ;; esac ;;
+          \'*\') body=${word#\'}; body=${body%\'}; case "$body" in *[\'\$\`\\]*) shell_opaque=1 ;; esac ;;
+          *) shell_opaque=1 ;;
+        esac
+        body=${body//$'\001'/ }
+        printf '%s' "$body" | grep -Eq -- "$DEL_RE|${SEP}([^[:space:]]*/)?(rm|rmdir|unlink|mv|git|kill|killall|pkill|chmod|chown|chgrp|eval|source)([[:space:]]|$)" && shell_opaque=1
+        break
+      fi
+      case "$word" in -c | -[A-Za-z]*c*) need_body=1 ;; esac
+    done < <(shell_words "$shseg")
+    [ "$got_body" -eq 1 ] || shell_opaque=1
+  done < <(printf '%s' "$raw1" | grep -oE -- "${SEP}([^[:space:]]*/)?(ba|z|da|k)?sh[[:space:]]+[^;&|]*")
 fi
 
 # ---- 2. 削除の範囲判定 ----
@@ -194,7 +248,7 @@ set_has_cd() { has_cd=0; printf '%s' "$1" | grep -Eq -- "${SEP}(cd|pushd)([[:spa
 # ${NAME:-x} 等のパラメータ展開、HOME / TMPDIR 自体への代入
 VARENV=""; VTAINT=" "
 resolve_assign=0
-if [ "$parse_failed" -eq 0 ] && [ "$shell_string" -eq 0 ]; then
+if [ "$parse_failed" -eq 0 ] && [ "$shell_opaque" -eq 0 ]; then
   case "$raw1" in *=*) resolve_assign=1 ;; esac
   printf '%s' "$raw1" | grep -Eq -- '(^|[^A-Za-z0-9_${])(HOME|TMPDIR)(\[[^]]*\])?\+?=' && resolve_assign=0
 fi
@@ -408,13 +462,61 @@ EOF
 varenv_reset() { VREST=$raw1; VDONE=""; VARENV=""; }
 varenv_for_seg() {
   local before
-  VARENV=""
+  VARENV=""; SEG_BEFORE=""
   case "$VREST" in *"$1"*) ;; *) VREST=""; return ;; esac
   before=${VREST%%"$1"*}
   VDONE="$VDONE$before"; VREST=${VREST#*"$1"}
-  case "$1" in *'$'*) [ "$resolve_assign" -eq 1 ] && build_varenv "$VDONE" ;; esac
+  SEG_BEFORE=$VDONE
+  [ "$resolve_assign" -eq 1 ] && build_varenv "$VDONE"
   VDONE="$VDONE$1"
 }
+# 直線的な絶対パスの cd を削除にだけ適用する。mv は従来の ?cd 判定を保つ。
+# cd が成功したと分かる && の連鎖だけを追い、; / || / 別スコープなら基準を確定しない。
+set_delete_cwd() {
+  local sp st first words target before="" saved_env="$VARENV" saved_taint="$VTAINT" seen=0 bad=0
+  delete_cwd=$cwd
+  set_has_cd "$SEG_BEFORE"
+  [ "$has_cd" -eq 1 ] || return
+  while IFS=$'\t' read -r sp st; do
+    st=${st#"${st%%[![:space:]]*}"}; st=${st%"${st##*[![:space:]]}"}
+    first=${st%%[[:space:]]*}
+    [ "$seen" -eq 0 ] || [ "$sp" = "&&" ] || bad=1
+    case "$first" in
+      if | then | else | elif | fi | for | while | until | do | done | case | esac | select | function \
+      | '{'* | '}'* | '('* | eval | source | . | exec | pushd | popd) bad=1 ;;
+    esac
+    case "$st" in *'()'* | *'( )'*) bad=1 ;; esac
+    if [ "$first" != cd ]; then
+      printf '%s' "$st" | grep -Eq -- "${SEP}(cd|pushd|popd)([[:space:];&|]|$)" && bad=1
+    fi
+    if [ "$first" = cd ]; then
+      seen=1
+      case "$sp" in '^' | ';' | '&&') ;; *) bad=1 ;; esac
+      words=$(shell_words "$st")
+      target=${words#*$'\n'}
+      case "$target" in --$'\n'*) target=${target#*$'\n'} ;; esac
+      case "$target" in '' | cd | *$'\n'* | '~'* | *'$('* | *[\`\*\?\[]*) bad=1 ;;
+        *)
+          case "$target" in *'$'*)
+            [ "$(bare_count HOME)" -eq 0 ] && [ "$(bare_count TMPDIR)" -eq 0 ] || bad=1 ;;
+          esac
+          VARENV=""
+          [ "$resolve_assign" -eq 1 ] && build_varenv "${before}${before:+ $sp }"
+          if target=$(expand_value "$target"); then
+            case "$target" in
+              *[\*\?\[]*) bad=1 ;;
+              /*) delete_cwd=$(norm_path "$target") ;;
+              *) bad=1 ;;
+            esac
+          else bad=1; fi ;;
+      esac
+    fi
+    before="$before${before:+ $sp }$st"
+  done < <(split_stmts "$SEG_BEFORE")
+  VARENV=$saved_env; VTAINT=$saved_taint
+  if [ "$seen" -eq 1 ] && [ "$bad" -eq 0 ]; then has_cd=0; else delete_cwd=$cwd; fi
+}
+
 # 削除対象のトークンに解決済みの変数を当てはめる（解決済みの変数が無ければそのまま）
 apply_varenv() { if [ -n "$VARENV" ]; then subst_vars "$1" 0; else printf '%s' "$1"; fi; }
 
@@ -451,7 +553,7 @@ resolve_target() {
   [ "$2" = "dotglob" ] && glob="A:"
   case "$t" in
     /*) abs="$t" ;;
-    *) [ "$has_cd" -eq 1 ] && { printf '?cd'; return; }; [ -n "$cwd" ] || { printf '?cwd'; return; }; abs="$cwd/$t" ;;
+    *) [ "$has_cd" -eq 1 ] && { printf '?cd'; return; }; [ -n "${delete_cwd:-$cwd}" ] || { printf '?cwd'; return; }; abs="${delete_cwd:-$cwd}/$t" ;;
   esac
   printf '%s%s' "$glob" "$(norm_path "$abs")"
 }
@@ -491,9 +593,11 @@ explain_unresolved() {
   esac
 }
 
-# 解決済みの削除対象 1 件を検査する（引数: resolve_target の結果, 再帰フラグ）。deny 条件に当たれば即終了
+# 解決済みの削除対象 1 件を検査する（引数: resolve_target の結果, 再帰フラグ, 変数適用後のトークン）。deny 条件に当たれば即終了
 check_one_target() {
-  local r="$1" rec="$2" mode n
+  local r="$1" rec="$2" tok="$3" mode n relative=1
+  tok=${tok//[\"\']/}
+  case "$tok" in /* | '~'* | '$'*) relative=0 ;; esac
   mode="dir"; case "$r" in A:*) mode="dotglob"; r=${r#A:} ;; G:*) mode="glob"; r=${r#G:} ;; esac
   is_allowed_path "$r" || deny "削除は ${ROOTS_DISP} と一時領域の配下でのみ許可されています（対象: ${r}）"
   # settings.json・ai/ の共通指示と ~/.claude/CLAUDE.md はハーネスそのもの（消えると全プロジェクト・全CLIの permissions・共通指示が失われる）なので単一ファイルでも止める
@@ -531,6 +635,12 @@ check_one_target() {
       "dir:$r" | "dir:$r"/* | "glob:$r"/* | "dotglob:$r"/*) deny "作業中のディレクトリ（またはその親）の削除は禁止です（対象: ${r}）" ;;
     esac
   fi
+  # コマンド内の cd 先は、. / .. など相対指定で自身・親を消す場合だけ保護する
+  if [ "$relative" -eq 1 ] && [ -n "$delete_cwd" ] && [ "$delete_cwd" != "$cwd" ]; then
+    case "$mode:$delete_cwd" in
+      "dir:$r" | "dir:$r"/* | "glob:$r"/* | "dotglob:$r"/*) deny "作業中のディレクトリ（またはその親）の削除は禁止です（対象: ${r}）" ;;
+    esac
+  fi
 }
 
 check_targets() { # 引数: 種別（rm|glob|dotglob）, トークン列（改行区切り）。glob は「その中身」扱い
@@ -547,7 +657,7 @@ check_targets() { # 引数: 種別（rm|glob|dotglob）, トークン列（改�
       [ -n "$ex" ] || continue
       case "$ex" in '?'*) r="$ex" ;; *) r=$(resolve_target "$ex" "$kind") ;; esac
       case "$r" in '?'*) ask "$(explain_unresolved "$r" "$tok" 削除)"; continue ;; esac
-      check_one_target "$r" "$rec"
+      check_one_target "$r" "$rec" "$ex"
     done < <(expand_braces "$(apply_varenv "$tok")")
   done <<EOF
 $toks
@@ -583,7 +693,7 @@ while IFS= read -r seg; do
   [ -n "$seg" ] || continue
   varenv_for_seg "$seg"
   case "$seg" in *xargs*) ask "前のコマンドの出力を xargs で受けて削除するコマンドです。対象が実行時に決まるため確認してください"; continue ;; esac
-  set_has_cd "${raw1%"$seg"*}"
+  set_delete_cwd
   seg=$(printf '%s' "$seg" | strip_cmdword 'rm|rmdir|unlink')
   check_targets rm "$(printf '%s' "$seg" | tr ' \t' '\n\n')"
 done < <(extract_segs 'rm|rmdir|unlink')
@@ -595,7 +705,8 @@ varenv_reset
 while IFS= read -r seg; do
   [ -n "$seg" ] || continue
   varenv_for_seg "$seg"
-  set_has_cd "${raw1%"$seg"*}"
+  delete_cwd=$cwd
+  set_has_cd "$SEG_BEFORE"
   seg=$(printf '%s' "$seg" | strip_cmdword mv)
   if printf '%s' "$seg" | grep -Eq -- '(^|[[:space:]])(-t|--target-directory)([[:space:]=]|$)'; then
     srcs=$(printf '%s' "$seg" | tr ' \t' '\n\n' | awk 'skip { skip = 0; next } $0 == "-t" || $0 == "--target-directory" { skip = 1; next } /^--target-directory=/ { next } /^-/ { next } /^$/ { next } { print }')
@@ -629,7 +740,7 @@ while IFS= read -r seg; do
   [ -n "$seg" ] || continue
   varenv_for_seg "$seg"
   case "$seg" in *-delete* | *'-exec rm'* | *'-execdir rm'* | *'-exec unlink'*) ;; *) continue ;; esac
-  set_has_cd "${raw1%"$seg"*}"
+  set_delete_cwd
   seg=$(printf '%s' "$seg" | strip_cmdword find)
   start=$(printf '%s' "$seg" | tr ' \t' '\n\n' | grep -v '^-' | grep -v '^$' | head -1)
   kind=dotglob
@@ -641,9 +752,9 @@ while IFS= read -r seg; do
 done < <(extract_segs find)
 
 # ---- 3. 削除語を含むが構造を解釈できない形 → ask ----
-# シェルへ文字列を渡す形（段 1 で検出済み。致命対象は段 1 で deny 済み）で、その文字列に削除語があれば ask。
+# 無害なリテラルの -c 本文以外は従来どおり ask（致命対象は段 1 で deny 済み）。
 # 引用符の中身も HEREDOC 本文も見る必要があるので元のコマンド文字列で判定する
-if [ "$shell_string" -eq 1 ]; then
+if [ "$shell_opaque" -eq 1 ]; then
   printf '%s' "$cmd" | grep -Eq -- "$DEL_RE" && ask "文字列をシェルに渡して実行し、その中で削除を行うコマンドです。中身を機械的に判定できないため確認してください"
 fi
 if [ "$parse_failed" -eq 1 ]; then
@@ -686,9 +797,55 @@ if printf '%s' "$sflat" | grep -Eq -- "${GIT_RE}restore[[:space:]]+([^;|&]*[[:sp
     ask 'git restore .: 作業ツリーの全変更を最後のコミットの状態へ戻すコマンドです。未コミットの成果物が失われないか確認してください'
   fi
 fi
-# killall / pkill と、全プロセス宛の kill（kill -9 -1 等。最初の引数が -1 のシグナル指定は対象外）
-printf '%s' "$s1" | grep -Eq -- "${SEP}(sudo[[:space:]]+)?(killall|pkill)([[:space:]]|$)|${SEP}(sudo[[:space:]]+)?kill[[:space:]]+[^;|&]*[[:space:]]-1([[:space:]]|$)" \
-  && ask 'killall / pkill / kill -1: 名前や全体指定でプロセスをまとめて終了するコマンドです。無関係なプロセスを止めないか確認してください'
+# コマンド置換を呼び出し元では 1 引数にし、その中のコマンドは別の行に戻す。
+# kill $(kill -9 -1) のように内部で実行される kill の確認は残す。
+kill_contexts() {
+  printf '%s' "$raw1" | awk '
+    function enter(kind) { outer[++depth] = out; quote[depth] = q; kinds[depth] = kind; out = ""; q = ""; paren[depth] = 0 }
+    function leave() { print out; out = outer[depth] "SUBST"; q = quote[depth]; depth-- }
+    BEGIN { out = ""; q = ""; depth = 0 }
+    {
+      for (i = 1; i <= length($0); i++) {
+        c = substr($0, i, 1)
+        if (c == "\\" && q != "'"'"'") { out = out c substr($0, ++i, 1); continue }
+        if (q != "'"'"'" && substr($0, i, 2) == "$(") { enter("("); i++; continue }
+        if (q != "'"'"'" && c == "`") {
+          if (depth > 0 && kinds[depth] == "`" && q == "") leave()
+          else enter("`")
+          continue
+        }
+        if (q != "") { out = out c; if (c == q) q = ""; continue }
+        if (c == "'"'"'" || c == "\"") { q = c; out = out c; continue }
+        if (depth > 0 && kinds[depth] == "(") {
+          if (c == "(") paren[depth]++
+          if (c == ")") {
+            if (paren[depth] == 0) { leave(); continue }
+            paren[depth]--
+          }
+        }
+        out = out c
+      }
+    }
+    END { print out; while (depth > 0) { print outer[depth] "SUBST"; depth-- } }'
+}
+# kill の直接引数だけを見る。置換の中の head -1 を全プロセス指定と誤認しない。
+kill_all=0
+printf '%s' "$s1" | grep -Eq -- "${SEP}(sudo[[:space:]]+)?(killall|pkill)([[:space:]]|$)" && kill_all=1
+while IFS= read -r seg; do
+  args=$(printf '%s' "$seg" | strip_cmdword kill)
+  args=$(shell_words "$args")
+  idx=0; first_arg=""
+  while IFS= read -r arg; do
+    idx=$((idx + 1))
+    arg=${arg//[\"\']/}; arg=${arg%%)*}
+    [ "$idx" -eq 1 ] && first_arg=$arg
+    [ "$idx" -gt 1 ] && [ "$arg" = -1 ] && kill_all=1
+  done <<EOF
+$args
+EOF
+  [ "$idx" -eq 1 ] && [ "$first_arg" = -1 ] && kill_all=1
+done < <(kill_contexts | grep -oE -- "${SEP}(sudo[[:space:]]+)?([^[:space:]]*/)?kill[[:space:]]+[^;&|]*" | sed -E 's/^[;&|(`\\]?[[:space:]]*//')
+[ "$kill_all" -eq 0 ] || ask 'killall / pkill / kill -1: 名前や全体指定でプロセスをまとめて終了するコマンドです。無関係なプロセスを止めないか確認してください'
 printf '%s' "$s1" | grep -Eq -- "${SEP}(sudo[[:space:]]+)?(chmod|chown|chgrp)[[:space:]]+[^;|&]*-[A-Za-z]*R[A-Za-z]*[[:space:]]+[^;|&]*[[:space:]]/" \
   && ask 'chmod / chown -R: 絶対パス配下の権限・所有者を再帰的に変更するコマンドです。対象範囲が広すぎないか確認してください'
 # リポジトリの .git（履歴）の削除は回復不能（rm -rf .git / ./.git / path/.git）

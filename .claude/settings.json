@@ -106,13 +106,13 @@
           {
             "type": "command",
             "command": "bash $HOME/.claude/hooks/pr-mode.sh",
-            "timeout": 15,
+            "timeout": 30,
             "onFailure": "block"
           },
           {
             "type": "command",
             "command": "bash $HOME/.claude/hooks/guard-destructive.sh",
-            "timeout": 15,
+            "timeout": 30,
             "onFailure": "block"
           }
         ]
