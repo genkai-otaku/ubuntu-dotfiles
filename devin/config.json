@@ -8,6 +8,10 @@
   "permissions": {
     "deny": [
       "Exec(sudo)",
+      "Exec(git push --force)",
+      "Exec(git push --force-with-lease)",
+      "Exec(git push -f)",
+      "Exec(gh pr merge)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.gnupg/**)",
@@ -16,7 +20,11 @@
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(**/*.pem)",
-      "Read(**/*.key)"
+      "Read(**/*.key)",
+      "Read(/**/.env)",
+      "Read(/**/.env.*)",
+      "Read(/**/*.pem)",
+      "Read(/**/*.key)"
     ],
     "ask": [
       "Exec(git commit)",
@@ -28,8 +36,8 @@
       "Exec(git branch -D)",
       "Exec(git stash drop)",
       "Exec(gh pr create)",
+      "Exec(gh pr new)",
       "Exec(gh pr edit)",
-      "Exec(gh pr merge)",
       "Exec(gh api)",
       "Exec(rm)",
       "Exec(mv)",
@@ -66,5 +74,7 @@
       "Exec(nix eval)",
       "Exec(direnv exec)"
     ]
-  }
+  },
+  "version": 1,
+  "theme_mode": "dark"
 }

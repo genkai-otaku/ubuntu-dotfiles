@@ -199,7 +199,7 @@ pre C77 deny "$S_OFF" 'echo "a $(echo $(echo x)) b" && git push'
 pre C78 none "$S_OFF" 'echo "a $(echo $(echo x)) b" && git status'
 pre C79 none "$S_OFF" 'gh api repos/o/r/pulls/1/comments -f body=LGTM'
 echo "#   strip に失敗したとき（awk が無い）は生文字列で判定する（fail-open にしない）"
-LIBLESS="$T/claude-prmode-libless.$$"; mkdir -p "$LIBLESS"; cp "$HOOK" "$LIBLESS/pr-mode.sh"
+LIBLESS="$T/claude-prmode-libless.$$"; mkdir -p "$LIBLESS/lib"; cp "$HOOK" "$LIBLESS/pr-mode.sh"; cp "$HOOKS_DIR/lib/git-write.sh" "$LIBLESS/lib/"
 out=$(payload PreToolUse "$S_OFF" 'git commit -m x' | bash "$LIBLESS/pr-mode.sh" 2>/dev/null); report C80-no-awk-deny deny "$(decision_of "$out")" ""
 out=$(payload PreToolUse "$S_OFF" 'git status' | bash "$LIBLESS/pr-mode.sh" 2>/dev/null); report C81-no-awk-none none "$(decision_of "$out")" ""
 rm -rf "$LIBLESS"
@@ -235,7 +235,7 @@ run_hook "$HOOK" UserPromptSubmit "$S" "" "" "$PR_H1"$'\n\n現在の作業内容
 # 見出しが違えば /pr の展開本文ではないのでフラグは消える
 run_hook "$HOOK" UserPromptSubmit "$S" "" "" $'# 別の見出し\n\n現在の作業内容をコミットし…' >/dev/null; [ -f "$F" ] && r=yes || r=no; report D04b-submit-other-h1 no "$r" ""
 # フックの隣に skills/pr/SKILL.md が無い（見出しが読めない）場合は、展開本文でもフラグを消す（fail-closed。フォールバックのリテラルは持たない）
-NOSKILL="$T/claude-prmode-noskill.$$"; mkdir -p "$NOSKILL/lib"; cp "$HOOK" "$NOSKILL/pr-mode.sh"; cp "$HOOKS_DIR/lib/strip-shell.awk" "$NOSKILL/lib/"
+NOSKILL="$T/claude-prmode-noskill.$$"; mkdir -p "$NOSKILL/lib"; cp "$HOOK" "$NOSKILL/pr-mode.sh"; cp "$HOOKS_DIR/lib/strip-shell.awk" "$HOOKS_DIR/lib/git-write.sh" "$NOSKILL/lib/"
 touch "$F"; run_hook "$NOSKILL/pr-mode.sh" UserPromptSubmit "$S" "" "" "$PR_H1"$'\n\n現在の作業内容をコミットし…' >/dev/null; [ -f "$F" ] && r=yes || r=no; report D04c-submit-no-skill-md no "$r" ""
 rm -rf "$NOSKILL"
 run_hook "$HOOK" UserPromptExpansion "$S" "" pr >/dev/null
@@ -344,4 +344,60 @@ out2=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -m "x"' "" "" "$REPO_SEC"
 report H09-unstaged-not-checked none "$(decision_of "$out2")" "ステージしていない変更は -a が無ければ見ない"
 rm -rf "$REPO_SEC"
 
+# PR 番号を指定した更新も共通の Git 書き込み判定に含める。
+pre I01-api-update deny "$S_OFF" 'gh api repos/o/r/pulls/12 -X PATCH -f title=x'
+pre I02-api-get none "$S_OFF" 'gh api repos/o/r/pulls/12'
+pre I03-api-quoted-update deny "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "PATCH" -f title=x'
+pre I04-api-quoted-create deny "$S_OFF" 'gh api "repos/o/r/pulls" -X POST -f title=x'
+pre I05-api-quoted-get none "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "GET"'
+pre I06-api-literal deny "$S_OFF" 'echo gh api "repos/o/r/pulls/12" -X PATCH -f title=x'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
+pre I07-api-read-and-literal deny "$S_OFF" 'gh api repos/o/r/pulls/12; echo gh api repos/o/r/pulls/12 -X PATCH'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
+pre I08-api-braces deny "$S_OFF" '{ gh api repos/o/r/pulls -f title=x; }'
+pre I09-api-then deny "$S_OFF" 'if true; then gh api repos/o/r/pulls -f title=x; fi'
+pre I10-api-do deny "$S_OFF" 'for i in 1; do gh api repos/o/r/pulls -f title=x; done'
+pre I11-api-negation deny "$S_OFF" '! gh api repos/o/r/pulls -f title=x'
+pre I12-api-xargs deny "$S_OFF" 'echo x | xargs gh api repos/o/r/pulls -f title=x'
+pre I13-api-else deny "$S_OFF" 'if false; then true; else gh api repos/o/r/pulls -f title=x; fi'
+pre I14-api-elif deny "$S_OFF" 'if false; then true; elif gh api repos/o/r/pulls -f title=x; then true; fi'
+pre I15-api-if deny "$S_OFF" 'if gh api repos/o/r/pulls -f title=x; then true; fi'
+pre I16-api-while deny "$S_OFF" 'while gh api repos/o/r/pulls -f title=x; do break; done'
+pre I17-api-until deny "$S_OFF" 'until gh api repos/o/r/pulls -f title=x; do break; done'
+pre I18-api-braces-get none "$S_OFF" '{ gh api repos/o/r/pulls -X GET -f state=open; }'
+pre I19-api-xargs-comments none "$S_OFF" 'echo x | xargs gh api repos/o/r/pulls/12/comments -f body=LGTM'
+pre I20-api-heredoc-literal none "$S_OFF" $'cat <<\'EOF\'\n{ gh api repos/o/r/pulls -f title=x; }\nEOF'
+pre I21-api-xargs-flags deny "$S_OFF" 'echo x | xargs -r -0 gh api repos/o/r/pulls -f title=x'
+pre I22-api-xargs-attached-count deny "$S_OFF" 'echo x | xargs -n1 gh api repos/o/r/pulls -f title=x'
+pre I23-api-xargs-attached-replace deny "$S_OFF" 'echo x | xargs -I{} gh api repos/o/r/pulls -f title=x'
+pre I24-api-xargs-count deny "$S_OFF" 'echo x | xargs -n 1 gh api repos/o/r/pulls -f title=x'
+pre I25-api-xargs-replace deny "$S_OFF" 'echo x | xargs -I {} gh api repos/o/r/pulls -f title=x'
+pre I26-api-xargs-parallel deny "$S_OFF" 'echo x | xargs -P 4 gh api repos/o/r/pulls -f title=x'
+pre I27-api-xargs-long-option deny "$S_OFF" 'echo x | xargs --max-args 1 gh api repos/o/r/pulls -f title=x'
+pre I28-api-xargs-end-options deny "$S_OFF" 'echo x | xargs -- gh api repos/o/r/pulls -f title=x'
+pre I29-api-xargs-option-get none "$S_OFF" 'echo x | xargs -r -n 1 gh api repos/o/r/pulls -X GET -f state=open'
+pre I30-api-xargs-option-comments none "$S_OFF" 'echo x | xargs -I{} gh api repos/o/r/pulls/12/comments -f body=LGTM'
+pre I31-api-xargs-command-boundary deny "$S_OFF" 'echo x | xargs -n 1 echo example; echo gh api repos/o/r/pulls -f title=x'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
+pre I32-api-xargs-combined-next deny "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -f title=x'
+pre I33-api-xargs-combined-attached deny "$S_OFF" 'echo x | xargs -r0n1 gh api repos/o/r/pulls -f title=x'
+pre I34-api-xargs-combined-options deny "$S_OFF" 'echo x | xargs -0n 1 -P 4 gh api repos/o/r/pulls -f title=x'
+pre I35-api-xargs-combined-get none "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -X GET -f state=open'
+# 改行はコマンド境界、行継続は同じコマンド、引用内改行は引数として扱う。
+pre J01-api-newline-write deny "$S_OFF" $'git status\ngh api "repos/o/r/pulls/12" -X PATCH -f title=x'
+pre J02-api-newline-literal deny "$S_OFF" $'gh api repos/o/r/pulls/12\necho gh api repos/o/r/pulls/12 -X PATCH'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
+pre J03-api-continuation deny "$S_OFF" $'gh api "repos/o/r/pulls/12" \\\n-X "PATCH" -f title=x'
+pre J04-api-multiline-echo none "$S_OFF" $'echo "PRの説明\ngh api repos/o/r/pulls/12 -X PATCH"'
+pre J05-api-multiline-body none "$S_OFF" $'gh api repos/o/r/pulls/12 -X GET -f body="利用例\ngh api repos/o/r/pulls/12 -X PATCH"'
+# 前置き語（timeout / nix develop -c 等）を問わず、引用値の括弧は区切りにしない。区切りの後の語は別の区間として見る。
+pre K01-api-timeout deny "$S_OFF" 'timeout 60 gh api repos/o/r/pulls -f title=x'
+pre K02-api-nix-develop deny "$S_OFF" 'nix develop -c gh api repos/o/r/pulls -f title=x'
+pre K03-api-direnv-exec deny "$S_OFF" 'direnv exec . gh api repos/o/r/pulls -f title=x'
+pre K04-api-env-unset deny "$S_OFF" 'env -u GITHUB_TOKEN gh api repos/o/r/pulls -f title=x'
+pre K05-api-nice deny "$S_OFF" 'nice gh api repos/o/r/pulls -f title=x'
+pre K06-api-backquote deny "$S_OFF" 'echo `gh api repos/o/r/pulls -f title=x`'
+pre K07-api-quoted-paren-double deny "$S_OFF" 'gh api -X POST -f title="feat(hooks): x" -f head=feat -f base=main repos/o/r/pulls'
+pre K08-api-quoted-paren-single deny "$S_OFF" "gh api -f title='fix(ci): x' repos/o/r/pulls"
+pre K09-api-quoted-paren-get none "$S_OFF" 'gh api repos/o/r/pulls/12 -f body="x (y)" -X GET'
+pre K10-api-semicolon-boundary none "$S_OFF" 'gh api repos/o/r/pulls/12; echo -X PATCH'
+pre K11-api-newline-boundary none "$S_OFF" $'gh api repos/o/r/pulls/12\necho -X PATCH'
+pre K12-api-subst-body-before-endpoint deny "$S_OFF" 'gh api -X POST -f title=x -f body="$(cat body.md)" repos/o/r/pulls'
+pre K13-api-subst-body-get none "$S_OFF" 'gh api repos/o/r/pulls/12 -f body="$(date)" -X GET'
 summary "pr-mode.sh"

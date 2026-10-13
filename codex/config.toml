@@ -1,13 +1,54 @@
-# Codex CLI の設定（実体は dotfiles の codex/config.toml。~/.codex/config.toml はここへのリンク）。
+# Codex CLI の宣言設定（home-manager がホーム側の config.toml へマージする）。
 # グローバル指示は ~/.codex/AGENTS.md（ai/core.md + ai/codex.md の連結。bash ai/install.sh が生成する）。
-# フックは ~/.codex/hooks.json（実体は codex/hooks.json）。
+# フックは codex/hooks.json の管理登録を ~/.codex/hooks.json へマージする。
 #
-# model は意図的に未設定（Codex の既定を使う）。固定したいときはユーザーが /model で選ぶか
-# ここに model = "<id>" を足す。モデルIDは版によって変わるため dotfiles では固定しない。
+# model / model_reasoning_effort はユーザーが選ぶ。既存の値をエージェントが変更しない。
+# Codex専用スキルは ~/.codex/skills（nix/home.nix で個別リンク）。
 
-approval_policy = "on-request"   # 既定の untrusted より緩い。承認が要る操作だけ尋ねる
+approval_policy = "on-request"   # 作業範囲内は自律実行し、範囲外の操作は承認を求める
+approvals_reviewer = "auto_review" # 承認が必要な操作は自動レビューへ回す
 sandbox_mode = "workspace-write" # 作業ディレクトリの外へは書かない
 model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
 
 [sandbox_workspace_write]
 network_access = true            # gh・nix・パッケージ取得に必要
+
+[desktop]
+followUpQueueMode = "steer"
+conversationDetailMode = "STEPS_PROSE"
+
+[plugins."codex-app-tools@openai-bundled"]
+enabled = true
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."unified-computer-use@openai-bundled"]
+enabled = true
+
+[plugins."visualize@openai-bundled"]
+enabled = true
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."pdf@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."template-creator@openai-primary-runtime"]
+enabled = true
+
+[plugins."code-review@openai-bundled"]
+enabled = true
+
+# node_repl の起動パス・環境変数は desktop がホーム側へ生成する。
+# 既存の起動定義がある場合だけ、この有効化設定を反映する。
+[mcp_servers.node_repl]
+enabled = true

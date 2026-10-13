@@ -100,5 +100,49 @@ report E01-missing-delta-rc 1 "$rc" "$(cat "$H2/out.txt")"
 report E02-claude-still-linked "$D2/core.md" "$(link_of "$H2/.claude/CLAUDE.md")" "1 つ失敗しても残りは配る"
 rm -rf "$H2" "$D2"
 
+echo "# F. Codex専用スキルを他CLIの共有探索先へ配らない"
+REPO_DIR="$(cd "$TESTS_DIR/../.." && pwd)"
+# home.file の宛先と Codex スキルの source の組を取り出す。
+# 同名スキルを5本置くだけでなく、実際のリンク先が専用ディレクトリであることを確認する。
+codex_skill_links=$(awk '
+  /^[[:space:]]*"[^"]+"[[:space:]]*=[[:space:]]*\{/ {
+    dest = $0
+    sub(/^[[:space:]]*"/, "", dest)
+    sub(/".*$/, "", dest)
+  }
+  /source = .*\/codex\/skills\// {
+    skill = $0
+    sub(/^.*\/codex\/skills\//, "", skill)
+    sub(/".*$/, "", skill)
+    print dest "=" skill
+  }
+' "$REPO_DIR/nix/home.nix")
+n=$(printf '%s\n' "$codex_skill_links" | grep -c '=')
+report F01-codex-skill-count 5 "$n" "$codex_skill_links"
+for skill in pr readme nix-setup git-pull clean-branches; do
+  actual=$(printf '%s\n' "$codex_skill_links" | grep -Fx ".codex/skills/$skill=$skill")
+  report "F02-${skill}-private-link" ".codex/skills/$skill=$skill" "$actual" "$codex_skill_links"
+done
+n=$(printf '%s\n' "$codex_skill_links" | grep -c '^\.agents/')
+report F03-no-codex-shared-links 0 "$n" "他CLIも探索する .agents へ Codex の source を配らない"
+codex_instructions=$(body_of "$H/.codex/AGENTS.md")
+pr_prompt=$(body_of "$REPO_DIR/codex/prompts/pr.md")
+for entry in instructions prompt; do
+  case "$entry" in
+    instructions) b="$codex_instructions" ;;
+    prompt) b="$pr_prompt" ;;
+  esac
+  report "F04-${entry}-private-pr" yes "$(has "$b" '~/.codex/skills/pr/SKILL.md')" "$entry"
+  report "F05-${entry}-no-shared-skills" no "$(has "$b" '~/.agents/skills')" "$entry"
+done
+for cli in opencode grok devin; do
+  case "$cli" in
+    opencode) dest="$H/.config/opencode/AGENTS.md" ;;
+    grok) dest="$H/.grok/AGENTS.md" ;;
+    devin) dest="$H/.config/devin/AGENTS.md" ;;
+  esac
+  report "F06-${cli}-no-codex-skills" no "$(has "$(body_of "$dest")" '~/.codex/skills')" "$dest"
+done
+
 cleanup
 summary "ai-install"

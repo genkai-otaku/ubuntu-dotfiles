@@ -29,13 +29,17 @@
         inherit system;
         config.allowUnfree = true;
       };
+      # CLI 設定のマージとテストで同じ Python・依存を使う。
+      cliConfigPython = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
     in
     {
+      packages.${system}.cli-config-python = cliConfigPython;
+
       # マシン（ホスト名）に依存しない固定の構成名。
       # 適用時は `--flake <リポジトリ>#ubuntu` と明示的に指定する
       homeConfigurations."ubuntu" = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
-        extraSpecialArgs = { inherit username dotfilesPath; };
+        extraSpecialArgs = { inherit username dotfilesPath cliConfigPython; };
         modules = [
           ./nix/home.nix
           ./nix/packages.nix

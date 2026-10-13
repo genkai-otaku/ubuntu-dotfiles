@@ -103,7 +103,10 @@ BEGIN { q = ""; hd = ""; stack = ""; hdbuf = ""; hd_expand = 0 }
       i++
     }
   }
-  print out
+  # API 引数解析だけは、引用が続く行の改行を区切りとして扱わない。
+  # 既存の利用では出力を変えない（join_quoted_lines は既定で 0）。
+  if (keepq && join_quoted_lines && q != "") printf "%s\001", out
+  else print out
 }
 END {
   if (hd != "") printf "%s", hdbuf                    # 閉じない HEREDOC の本文は捨てずに戻す

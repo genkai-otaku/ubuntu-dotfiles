@@ -52,6 +52,9 @@ permissions:
     resource: "gh pr create *"
     effect: allow
   - action: shell
+    resource: "gh pr new *"
+    effect: allow
+  - action: shell
     resource: "git commit *--amend*"
     effect: deny
   - action: shell

@@ -18,7 +18,7 @@ Claude Code・Grok・OpenCode・Codex・Devin の 5 つの CLI へ、**同じ共
 | `claude.md` | Claude Code 固有（モデル運用とレビューのモデル分離、フックの挙動） |
 | `grok.md` | Grok 固有（サブエージェントの種類、permission mode と `/pr`） |
 | `opencode.md` | OpenCode 固有（Hooks が動かないこと、`/pr`・`@pr` の起動条件） |
-| `codex.md` | Codex 固有（`config.toml` / `hooks.json`、拒否専用フック） |
+| `codex.md` | Codex 固有（`config.toml` / `hooks.json`、拒否専用フック、個人用スキルと `$pr`） |
 | `devin.md` | Devin 固有（`config.json` の permissions、クラウド側セッションの注意） |
 | `install.sh` | 上記を各 CLI のグローバル指示ファイルへ配布する（冪等） |
 
@@ -29,7 +29,7 @@ CLI によって「グローバル指示をどこから読むか」「複数フ�
 | CLI | 読み込み先 | 配り方 |
 | --- | --- | --- |
 | Claude Code | `~/.claude/CLAUDE.md`（全セッション）＋ `~/.claude/rules/*.md`（frontmatter の `paths` が無ければ常時読み込み） | `core.md` と `claude.md` へのシンボリックリンク。**編集が即反映される**（再実行は不要） |
-| OpenCode | `~/.config/opencode/AGENTS.md` | `core.md` + `opencode.md` を連結生成。**このファイルを置くこと自体が二重読み込みの防止**（グローバル指示が無いと OpenCode は Claude 互換フォールバックで `~/.claude/CLAUDE.md`＝`core.md` を読むため）。`opencode.json` の `instructions` は使わない |
+| OpenCode | `~/.config/opencode/AGENTS.md` | `core.md` + `opencode.md` を連結生成。V2 は `AGENTS.md` のみを読み、`CLAUDE.md` へのフォールバックは無い。`opencode.json` の `instructions` は現在参照を解決しないため使わない |
 | Grok | `~/.grok/AGENTS.md` | `core.md` + `grok.md` を連結生成（`config.toml` の `[compat.claude] rules = false` で Claude のルールは読ませない） |
 | Codex | `~/.codex/AGENTS.md`（`AGENTS.override.md` があればそちらが優先される） | `core.md` + `codex.md` を連結生成 |
 | Devin | `~/.config/devin/AGENTS.md` | `core.md` + `devin.md` を連結生成（`devin/config.json` の `read_config_from.claude = false` で Claude のルールは読ませない） |
@@ -42,11 +42,13 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/ai/install.sh
 
 `home-manager switch` の activation（`nix/home.nix` の `linkAiInstructions`）でも自動実行される。生成ファイルの先頭には「自動生成（編集しない）」と実体のパスが入る。
 
+Codexの個人用スキルは `nix/home.nix` が `codex/skills/` から従来の互換探索先 `~/.codex/skills/` へ個別にリンクする。他CLIも探索する `~/.agents/skills/` にCodex専用の指示を置かない。各スキルは `.claude/skills/` の共通手順を必要時に読む。Claude専用のモデル名・ツール権限はCodexへ持ち込まない。スキル入口の対応表、旧管理リンクからの移行と新しいチャットでの確認は [`../codex/README.md`](../codex/README.md) を参照。
+
 ## 他のCLI互換読み込みを切る理由
 
 Grok（`[compat.claude]` の `rules` と `agents`。`agents` が `~/.claude/CLAUDE.md` の読み込みを制御する）と Devin（`read_config_from.claude`）は Claude Code の指示ファイルを読み込む機能を持つが、どちらも切っている（Grok の `skills` と `hooks` は共有したいので true のまま）。入れると `~/.claude/CLAUDE.md` と自分の `AGENTS.md` の両方に共通ルールが載って二重読みになり、Claude 固有のモデル名やフックの記述まで持ち込まれるため。
 
-OpenCode には互換読み込みの明示的なスイッチが無く、グローバル指示が見つからないときに `~/.claude/CLAUDE.md` へフォールバックする。そのため「`~/.config/opencode/AGENTS.md` を置く」ことが二重読みの防止策になる（消すとフォールバックが働いて `core.md` が読まれ、`ai/opencode.md` は読まれなくなる）。
+OpenCode V2 は `AGENTS.md` のみを読み、V1 の `CLAUDE.md` フォールバックは使わない。`~/.config/opencode/AGENTS.md` を消すと共通ルールと `ai/opencode.md` の両方が読まれなくなるため、連結生成したファイルを維持する。`opencode.json` の `instructions` は現在ファイル・glob・URLを解決しないので代替にはならず、将来対応した際の二重読みも避けるため `ai/` を列挙しない（[V2の指示](https://opencode.ai/v2/docs/instructions/)・[V1からの移行](https://opencode.ai/v2/docs/migrate-v1/)）。
 
 ## 変更したときの検証
 
@@ -56,6 +58,6 @@ bash .claude/tests/run.sh   # install.sh の構文・配布の挙動（test-ai-i
 
 ## 既知の制約
 
-- Codex・Devin はこのマシンに未導入のため、`codex/`・`devin/` の設定と `AGENTS.md` の配置は**実機未確認**（ファイルの文法とパスは公式ドキュメントに合わせ、`codex/hooks/guard.sh` の判定は `.claude/tests/test-codex-guard.sh` で模擬入力に対して検査している）
+- CodexはCLI 0.162.1で設定の読み込みを確認している。フック判定は `.claude/tests/test-codex-guard.sh` などの模擬入力で検査する。実行中のdesktopセッションへの反映は、新しいチャットとフックの信頼確認が必要（[`../codex/README.md`](../codex/README.md)）。Devinの設定と `AGENTS.md` の配置は実機未確認
 - Claude Code 以外は生成物なので、`ai/*.md` を直してから `install.sh` を流すまでの間は古い内容が読まれる
 - プロジェクト側の読み込み規則は CLI ごとに違う（Claude Code は v2.1.277 以降、プロジェクト指示の設定が既定の `claude-md-or-agents-md` で、作業ディレクトリより上に `CLAUDE.md` / `CLAUDE.local.md` が無ければ `AGENTS.md` を読む。OpenCode / Codex / Grok / Devin は `AGENTS.md`）。このリポジトリは `AGENTS.md` に集約している

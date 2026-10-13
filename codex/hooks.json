@@ -3,29 +3,67 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "bash \"$HOME/.codex/hooks/guard.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.codex/hooks/guard.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "shell",
+        "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "bash \"$HOME/.codex/hooks/guard.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.codex/hooks/harness.sh\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.codex/hooks/guard.sh\"",
+            "timeout": 30
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "bash \"$HOME/.codex/hooks/guard.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.codex/hooks/harness.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.codex/hooks/guard.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ],
     "SessionEnd": [
       {
         "hooks": [
-          { "type": "command", "command": "bash \"$HOME/.codex/hooks/guard.sh\"", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.codex/hooks/guard.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.codex/hooks/harness.sh\"",
+            "timeout": 10
+          }
         ]
       }
     ]

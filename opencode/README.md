@@ -8,8 +8,9 @@ OpenCode V2のグローバル設定。設定ファイルはhome-managerで `~/.c
 |---|---|
 | [`../ai/opencode.md`](../ai/opencode.md) | OpenCode 固有の差分のみ（共通ルールは [`../ai/core.md`](../ai/core.md)。両者を連結した `~/.config/opencode/AGENTS.md` を `ai/install.sh` が生成する） |
 | [`opencode.json`](opencode.json) | Skillのソース、秘密ファイルの読み取り禁止、Git書き込み・破壊的操作・恒久インストールの確認、`sudo` / force pushの拒否 |
-| [`cli.json`](cli.json) | TUIのダークテーマ、権限確認、OS通知 |
+| [`cli.json`](cli.json) | TUIのダークテーマ、権限確認、OS通知、usage-footerの明示登録 |
 | [`plugins/mobile-notify.js`](plugins/mobile-notify.js) | V2の実行成功時に、既存の`claude-notify`送信機能でiPhoneへ通知 |
+| [`plugins/usage-footer/`](plugins/usage-footer/) | チャット欄下にOpenCode Goの5時間利用率（ローカル履歴からの推定）とセッションコンテキスト使用率を表示 |
 | [`commands/`](commands/) | `/pr`・`/readme`・`/clean-branches`・`/nix-setup`・`/git-pull`・`/code-review` |
 | [`agents/code-review.md`](agents/code-review.md) | 差分を調査する、Kimi K2.7 Code使用の読み取り専用レビューAgent |
 | [`agents/pr.md`](agents/pr.md) | `/pr` 専用Agent。通常コミット・`origin` push・PR作成のみ確認なしで許可 |
@@ -18,11 +19,13 @@ OpenCode V2のグローバル設定。設定ファイルはhome-managerで `~/.c
 
 ## Claude Code / Grokとの共有
 
-- 全プロジェクト共通の指示は `~/.config/opencode/AGENTS.md`。実体は [`ai/core.md`](../ai/README.md)（全CLI共通）＋ `ai/opencode.md`（OpenCode固有の差分）で、`ai/install.sh` が連結生成する（手で編集しない）。**このファイルを消さないこと**：OpenCode はグローバル指示が無いと Claude 互換フォールバックで `~/.claude/CLAUDE.md`（= `ai/core.md`）を読むため、`ai/opencode.md` が読まれなくなる。同じ理由で `opencode.json` の `instructions` に `ai/` を列挙しない（AGENTS.md と二重に読まれる）。
+- 全プロジェクト共通の指示は `~/.config/opencode/AGENTS.md`。実体は [`ai/core.md`](../ai/README.md)（全CLI共通）＋ `ai/opencode.md`（OpenCode固有の差分）で、`ai/install.sh` が連結生成する（手で編集しない）。**このファイルを消さないこと**：V2 は `AGENTS.md` のみを読み、`CLAUDE.md` へのフォールバックは無いため、消すと共通ルールとOpenCode固有の差分が両方読まれなくなる。`opencode.json` の `instructions` は現在参照を解決しないため代替にならず、将来対応した際の二重読みも避けるため `ai/` を列挙しない（[V2の指示](https://opencode.ai/v2/docs/instructions/)・[V1からの移行](https://opencode.ai/v2/docs/migrate-v1/)）。
 - OpenCodeは `~/.claude/skills/` も互換ソースとして検索するため、`readme`・`clean-branches`・`nix-setup`・`git-pull` Skillsは既存定義を共有する。`pr` は明示した `opencode/skills` ソースから読み、Claude Code版のフック手順と重ならないようOpenCode用のpermission手順を使う。
 - Claude CodeのHooks、settings.json、モデル振り分けはOpenCodeでは動かない。代替としてOpenCodeのpermissionルールを設定している。
-- `/pr` Command本文の受信、またはユーザー発言先頭の独立した `@pr` を明示起動として扱い、SkillツールでID `pr` を読み込んで子セッションを作らず実行する。通常コミット・`origin` へのPR用ブランチprefixのpush・PR作成の許可は非表示の専用Agentにだけ設定し、他のセッションでは従来どおり確認する。force push・refspec push等は拒否する。
+- `/pr` Command本文の受信、またはユーザー発言先頭の独立した `@pr` を明示起動として扱い、SkillツールでID `pr` を読み込んで子セッションを作らず実行する。通常の `gh pr create`・`gh pr new`・`gh pr edit` は確認する。通常コミット・`origin` へのPR用ブランチprefixのpush・`gh pr create` / `gh pr new` の許可は非表示の専用Agentにだけ設定する。`gh pr edit` はSkillに本文編集手順が無いため専用Agentでも確認を維持する。force push・refspec push等は拒否する。
 - `cli.json` のOS通知に加え、グローバルプラグインが`session.execution.succeeded`（実行成功）時にiPhoneへWeb Push通知する。イベントの`data.sessionID`から親セッションを確認し、Claude/Grokと同じ`~/.claude/claude-notify.json`・送信スクリプト・PWAを使うため、通知設定の追加は不要。
+- `plugins/usage-footer/` はTUIの `prompt.footer` にGo 5時間枠の推定値と現在セッションのコンテキスト使用率を表示する。Goの5時間枠はモデル別で、TUI向けの正確なアカウント使用量APIが公開されていないため、Goの標準プラン上限とこのOpenCodeが持つ直近5時間のセッション履歴・コストから推定する。別端末やOpenCode以外のクライアントの使用量、Go Plusの上限は含まれない。履歴を持たないモデルでは `--` を表示する。
+- usage-footerは `cli.json` の `plugins` に `./plugins/usage-footer` と明示登録する。相対パスは `cli.json` のあるディレクトリが基準で、既存のhome-managerリンク先の `tui.ts` から `tui.tsx` を読む。[公式CLIプラグイン仕様](https://opencode.ai/v2/docs/cli/plugins)と実機v2.0.22にはディレクトリの自動探索もあるが、登録を設定に明示する。実機のローダーはローカルの `tui` 入口を解決し、`@opencode/plugin/tui`・`solid-js`・OpenTUIを実行時に共有するため、追加の `package.json` や依存インストールは不要。設定の反映はTUIを起動し直す。読み込み経路は公式仕様とバイナリ内の実装で確認済みだが、表示は未確認（[CLIプラグインの作成](https://opencode.ai/v2/docs/build/plugins/cli/)）。
 - 通知対象は親セッションの正常完了のみ。V2ではバックグラウンドサービスがプラグインを読み込むため、変更後は`opencode service restart`で再読み込みする（実行中セッションは切断される）。
 - 通知が届かない場合は`opencode api get /api/plugin`でプラグイン状態を確認し、`~/.claude/claude-notify.log`で送信側の結果、`~/.local/share/opencode/log/opencode.log`でプラグインの読み込みエラーを確認する。
 - OpenCode V2はプロジェクトの `CLAUDE.md` を読まず、`AGENTS.md` を読む。ルートの `AGENTS.md` はClaude Codeも対応バージョン・設定で直接読めるため、このリポジトリでは `CLAUDE.md` を重複管理しない。
