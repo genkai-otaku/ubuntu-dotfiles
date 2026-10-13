@@ -26,11 +26,14 @@ if [ "${CLI_CONFIG_PYTHON+x}" != x ] && ! PYTHONDONTWRITEBYTECODE=1 python3 -c '
 fi
 
 output=$(PYTHONDONTWRITEBYTECODE=1 CLI_CONFIG_REPO="$ROOT" "$python" - <<'PY' 2>&1
+from collections import Counter
 import copy
 import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -182,6 +185,95 @@ CODEX_HOME = "/fixture/home/.codex"
         (self.repo / "codex/config.toml").write_text("model = 'updated'\n")
         self.generate()
         self.assertEqual(tomlkit.parse(self.config.read_text())["unknown"], "keep")
+
+    def test_every_declared_hook_is_owned(self):
+        declared = json.loads((root / "codex/hooks.json").read_text())
+        hooks = [hook for groups in declared["hooks"].values() for group in groups for hook in group["hooks"]]
+        self.assertTrue(hooks)
+        for hook in hooks:
+            self.assertTrue(module.owned_hook(hook), hook["command"])
+
+    def test_declared_hook_forms_do_not_accumulate(self):
+        self.hooks.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [
+            {"type": "command", "command": "/usr/bin/orca-hook", "timeout": 5}]}]}}))
+        declared = json.loads((self.repo / "codex/hooks.json").read_text())
+        declared["hooks"]["Stop"][0]["hooks"].append(
+            {"type": "command", "command": 'bash "$HOME/.codex/hooks/notify.sh"', "timeout": 10})
+        declared["hooks"]["PreToolUse"][0]["hooks"].append(
+            {"type": "command", "command": '"$HOME/.codex/hooks/guard.sh"', "timeout": 30})
+        (self.repo / "codex/hooks.json").write_text(json.dumps(declared))
+        for _ in range(3):
+            self.generate()
+        def commands_of(hooks_json):
+            return Counter(hook["command"] for groups in hooks_json["hooks"].values()
+                           for group in groups for hook in group["hooks"])
+
+        expected = commands_of(declared)
+        expected["/usr/bin/orca-hook"] = 1
+        self.assertEqual(commands_of(json.loads(self.hooks.read_text())), expected)
+
+    def test_owned_hook_forms_replaced_then_removed(self):
+        old = {"type": "command", "command": 'bash "$HOME/.codex/hooks/notify.sh"', "timeout": 10}
+        external = {"type": "command", "command": "/usr/bin/orca-hook", "timeout": 5}
+        self.hooks.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [old, external]}]}}))
+        declared = json.loads((self.repo / "codex/hooks.json").read_text())
+        declared["hooks"]["Stop"] = [{"hooks": [
+            {"type": "command", "command": '"$HOME/.codex/hooks/notify.sh" --quiet', "timeout": 10}]}]
+        (self.repo / "codex/hooks.json").write_text(json.dumps(declared))
+        def stop_commands():
+            return [hook["command"] for group in json.loads(self.hooks.read_text())["hooks"]["Stop"]
+                    for hook in group["hooks"]]
+        self.generate()
+        commands = stop_commands()
+        self.assertNotIn('bash "$HOME/.codex/hooks/notify.sh"', commands)
+        self.assertEqual(commands.count('"$HOME/.codex/hooks/notify.sh" --quiet'), 1)
+        self.assertEqual(commands.count("/usr/bin/orca-hook"), 1)
+        del declared["hooks"]["Stop"]
+        (self.repo / "codex/hooks.json").write_text(json.dumps(declared))
+        self.generate()
+        commands = stop_commands()
+        self.assertFalse(any("notify.sh" in command for command in commands), commands)
+        self.assertEqual(commands.count("/usr/bin/orca-hook"), 1)
+
+    def test_declared_exact_command_does_not_accumulate_when_not_owned(self):
+        hook = {"type": "command", "command": "/usr/local/bin/declared-hook", "timeout": 5}
+        self.hooks.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [hook]}]}}))
+        declared = json.loads((self.repo / "codex/hooks.json").read_text())
+        declared["hooks"].setdefault("Stop", []).append({"hooks": [hook]})
+        (self.repo / "codex/hooks.json").write_text(json.dumps(declared))
+        for _ in range(3):
+            self.generate()
+        stop = json.loads(self.hooks.read_text())["hooks"]["Stop"]
+        self.assertEqual(sum(h["command"] == "/usr/local/bin/declared-hook" for g in stop for h in g["hooks"]), 1)
+
+    def test_declared_config_without_runtime_mcp_is_idempotent(self):
+        (self.repo / "codex/config.toml").write_text((root / "codex/config.toml").read_text())
+        self.generate()
+        first = self.config.read_text()
+        self.assertNotIn("mcp_servers", first)
+        for _ in range(2):
+            self.generate()
+        self.assertEqual(self.config.read_text(), first)
+
+    def test_main_reports_target_path_without_content_on_invalid_json(self):
+        self.hooks.write_text('{"local_secret": ')
+        result = subprocess.run(
+            [sys.executable, str(root / "nix/merge-cli-config.py"), "--repo", str(self.repo), "--home", str(self.home)],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ホーム側の " + str(self.hooks), result.stderr)
+        self.assertNotIn("local_secret", result.stdout + result.stderr)
+        self.assertEqual(self.hooks.read_text(), '{"local_secret": ')
+        self.assertFalse(self.config.exists())
+
+    def test_main_names_declared_side_when_declaration_is_invalid(self):
+        (self.repo / "codex/hooks.json").write_text('{"hooks": ')
+        result = subprocess.run(
+            [sys.executable, str(root / "nix/merge-cli-config.py"), "--repo", str(self.repo), "--home", str(self.home)],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("宣言側の " + str(self.repo / "codex/hooks.json"), result.stderr)
+        self.assertNotIn(str(self.hooks), result.stderr)
 
 
 unittest.main()
