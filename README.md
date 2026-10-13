@@ -81,6 +81,7 @@ dotfiles/
 ├── .github/
 │   ├── dependabot.yml               # Nix・pnpm・GitHub Actionsの日次更新
 │   └── workflows/
+│       ├── ci.yml                   # このリポジトリの検証（verify）
 │       ├── delete-merged-branch.yml # PRマージ後にheadブランチを自動削除
 │       └── request-dependabot-review.yml # Dependabot PRでレビューを自動依頼
 ├── zsh/
@@ -94,7 +95,7 @@ dotfiles/
 ├── claude-notify/         # iPhoneプッシュ通知の送信スクリプト（Claude/Grokフック・OpenCode pluginから呼ばれる）
 │   ├── README.md
 │   ├── send-push.mjs     # Web Push送信本体（VAPID署名。設定は ~/.claude/claude-notify.json）
-│   ├── package.json      # 依存は web-push のみ
+│   ├── package.json      # web-push と開発用の Biome
 │   └── pnpm-lock.yaml    # node_modules は activation 時に自動導入（gitignore）
 ├── ssh-tailscale/         # iPhoneからTailscale経由SSH（OpenSSH + Tailscale。本体はNix管理外）
 │   ├── README.md         # iPhone側の接続手順とUbuntu側の残作業
@@ -195,10 +196,10 @@ nix flake update
 - OpenSSH / Tailscale：`bootstrap.sh` と `home-manager switch` の両方で `ssh-tailscale/setup.sh` が自動実行される（ログインだけ `sudo tailscale up` が手動。iPhone側は [ssh-tailscale/README.md](/ssh-tailscale/README.md)）
 
 ### GitHub Actionsワークフローのコピー
-導入したいリポジトリのルートに移動して、そのまま実行する：
+`ci.yml` の `verify` は main 向けPRと main へのpushで設定・シェル構文・Nix評価・claude-notify の Biome を検証する。このリポジトリ専用なので、他リポジトリへは共通ワークフローだけをコピーする。導入したいリポジトリのルートに移動して、そのまま実行する：
 ```zsh
 mkdir -p .github/workflows
-cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/*.yml .github/workflows/
+cp ~/Dev/kaishi/ubuntu-dotfiles/.github/workflows/{delete-merged-branch,request-dependabot-review}.yml .github/workflows/
 ```
 
 ### コマンドリファレンス（[commands](/commands/private.md)）
