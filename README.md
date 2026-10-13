@@ -14,7 +14,7 @@ Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する
 - Claude Code（`settings.json` / Skills / Agents / Hooksによるグローバル設定管理）
 - Grok CLI（xAI。`grok/config.toml`をhome-manager経由で書き込み可能リンク。グローバル指示は`ai/`から連結生成。本体は`bootstrap.sh`が公式インストーラーで導入）
 - OpenCode（`opencode/`のSkills / Commands / permissions / CLI設定をhome-manager経由でリンク。本体は公式インストーラーで導入）
-- Codex CLI（OpenAI。`codex/config.toml`・`codex/hooks.json`・`codex/hooks/guard.sh`・`codex/prompts/pr.md`をhome-manager経由でリンク。本体は`bootstrap.sh`が公式インストーラーで導入）
+- Codex CLI（OpenAI。`codex/`の設定・フック・スキルをhome-manager経由でリンク。Claudeと共通の手順を`$pr`・`$readme`等で使う。本体は`bootstrap.sh`が公式インストーラーで導入。反映とUbuntuのサンドボックス対策は`codex/README.md`）
 - Devin CLI（Cognition。`devin/config.json`をhome-manager経由でリンク。本体は`bootstrap.sh`が公式インストーラーで導入）
 - Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Claude/GrokのStop・NotificationとOpenCode V2の実行成功時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
 - GitHub Actions（`.github/workflows/`配下で共通ワークフローを管理し、他リポジトリへ配布）
@@ -51,9 +51,12 @@ dotfiles/
 │   └── config.toml        # Grok CLI（xAI）の設定実体（home.nixが~/.grok/config.tomlへ書き込み可能リンク）
 ├── codex/
 │   ├── config.toml        # Codex CLIの設定（承認ポリシー・サンドボックス）
-│   ├── hooks.json         # Codexのフック登録（UserPromptSubmit / PreToolUse / Stop / SessionEnd）
+│   ├── README.md          # 設定反映・フック信頼・CLIとdesktop・Ubuntuのサンドボックス対策
+│   ├── hooks.json         # Codexのフック登録（PR制限・削除ガード・変更後の検証ゲート）
 │   ├── hooks/guard.sh     # /pr 外のコミット・push・PR操作と危険な操作を拒否（拒否専用）
-│   └── prompts/pr.md      # Codexの /pr プロンプト（手順は .claude/skills/pr/SKILL.md を読ませる）
+│   ├── hooks/harness.sh   # Claudeの事故防止ガード・検証ゲートをCodexイベントへ接続
+│   ├── skills/            # ~/.agents/skills への個別リンク（共通手順のCodex用入口）
+│   └── prompts/pr.md      # Codexの旧 /prompts:pr 入口（新しい入口は $pr）
 ├── devin/
 │   └── config.json        # Devin CLIの設定（permissions・他ツールのルール読み込みの可否）
 ├── opencode/
@@ -148,6 +151,10 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/ai/install.sh
 ### OpenCode
 
 `bootstrap.sh`がOpenCode CLIを公式インストーラーで導入する。設定はhome-managerで`~/.config/opencode/`へリンクされる。xAI/Grokを使う場合はOpenCode起動後に`/connect`で接続し、`/models`でモデルを選ぶ。詳細は[opencode/README.md](/opencode/README.md)。
+
+### Codex
+
+設定・フックと個人用スキルをhome-managerでリンクする。Claude Codeと共通の手順は`$pr`・`$readme`・`$nix-setup`・`$git-pull`・`$clean-branches`で起動する。フック追加・変更後は新しいチャットの`/hooks`で内容を確認して信頼する。反映方法、CLIとdesktopの違い、Ubuntuで通常のシェル操作が承認を求め続ける場合の対処は[codex/README.md](/codex/README.md)。
 
 ### zsh設定の反映
 ```zsh

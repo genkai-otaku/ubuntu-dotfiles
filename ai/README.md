@@ -18,7 +18,7 @@ Claude Code・Grok・OpenCode・Codex・Devin の 5 つの CLI へ、**同じ共
 | `claude.md` | Claude Code 固有（モデル運用とレビューのモデル分離、フックの挙動） |
 | `grok.md` | Grok 固有（サブエージェントの種類、permission mode と `/pr`） |
 | `opencode.md` | OpenCode 固有（Hooks が動かないこと、`/pr`・`@pr` の起動条件） |
-| `codex.md` | Codex 固有（`config.toml` / `hooks.json`、拒否専用フック） |
+| `codex.md` | Codex 固有（`config.toml` / `hooks.json`、拒否専用フック、個人用スキルと `$pr`） |
 | `devin.md` | Devin 固有（`config.json` の permissions、クラウド側セッションの注意） |
 | `install.sh` | 上記を各 CLI のグローバル指示ファイルへ配布する（冪等） |
 
@@ -42,6 +42,8 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/ai/install.sh
 
 `home-manager switch` の activation（`nix/home.nix` の `linkAiInstructions`）でも自動実行される。生成ファイルの先頭には「自動生成（編集しない）」と実体のパスが入る。
 
+Codexの個人用スキルは `nix/home.nix` が `codex/skills/` から `~/.agents/skills/` へ個別にリンクする。`$pr`・`$readme`・`$nix-setup`・`$git-pull`・`$clean-branches` は `.claude/skills/` の共通手順を必要時に読む。Claude専用のモデル名・ツール権限はCodexへ持ち込まない。フックの信頼確認やCLIとdesktopの違いは [`../codex/README.md`](../codex/README.md) を参照。
+
 ## 他のCLI互換読み込みを切る理由
 
 Grok（`[compat.claude]` の `rules` と `agents`。`agents` が `~/.claude/CLAUDE.md` の読み込みを制御する）と Devin（`read_config_from.claude`）は Claude Code の指示ファイルを読み込む機能を持つが、どちらも切っている（Grok の `skills` と `hooks` は共有したいので true のまま）。入れると `~/.claude/CLAUDE.md` と自分の `AGENTS.md` の両方に共通ルールが載って二重読みになり、Claude 固有のモデル名やフックの記述まで持ち込まれるため。
@@ -56,6 +58,6 @@ bash .claude/tests/run.sh   # install.sh の構文・配布の挙動（test-ai-i
 
 ## 既知の制約
 
-- Codex・Devin はこのマシンに未導入のため、`codex/`・`devin/` の設定と `AGENTS.md` の配置は**実機未確認**（ファイルの文法とパスは公式ドキュメントに合わせ、`codex/hooks/guard.sh` の判定は `.claude/tests/test-codex-guard.sh` で模擬入力に対して検査している）
+- CodexはCLI 0.162.1で設定の読み込みを確認している。フック判定は `.claude/tests/test-codex-guard.sh` などの模擬入力で検査する。実行中のdesktopセッションへの反映は、新しいチャットとフックの信頼確認が必要（[`../codex/README.md`](../codex/README.md)）。Devinの設定と `AGENTS.md` の配置は実機未確認
 - Claude Code 以外は生成物なので、`ai/*.md` を直してから `install.sh` を流すまでの間は古い内容が読まれる
 - プロジェクト側の読み込み規則は CLI ごとに違う（Claude Code は v2.1.277 以降、プロジェクト指示の設定が既定の `claude-md-or-agents-md` で、作業ディレクトリより上に `CLAUDE.md` / `CLAUDE.local.md` が無ければ `AGENTS.md` を読む。OpenCode / Codex / Grok / Devin は `AGENTS.md`）。このリポジトリは `AGENTS.md` に集約している

@@ -5,7 +5,7 @@
 #       hooks/lib/*.awk の構文、SKILL.md / agents の frontmatter、
 #       settings.json のフック・statusLine の登録元検査、
 #       フックと共通指示の配布のテーブル駆動テスト
-#       （pr-mode / guard-destructive / verify-gate / validate-claude-config / ai-install / codex-guard / grok-compat / git-pull。
+#       （pr-mode / guard-destructive / verify-gate / validate-claude-config / ai-install / codex-guard / codex-harness / grok-compat / git-pull。
 #         各テストの summary 行も検査する）
 # 環境変数 HOOKS_DIR を指定すると、別の場所にあるフック（作業コピー）をテストできる
 set -u
@@ -32,14 +32,14 @@ for f in "$HOOKS_DIR"/*.sh "$HOOKS_DIR"/lib/*.sh "$CLAUDE_DIR/setup.sh" "$CLAUDE
   esac
 done
 # frontmatter は validate-claude-config.sh と同じ条件で見る（1 行目の --- ／ 閉じ --- ／ name: ／ description:）
-for f in "$CLAUDE_DIR"/skills/*/SKILL.md "$CLAUDE_DIR"/agents/*.md; do
+for f in "$CLAUDE_DIR"/skills/*/SKILL.md "$CLAUDE_DIR"/agents/*.md "$REPO_DIR"/codex/skills/*/SKILL.md; do
   [ -f "$f" ] || continue
   fm=$(awk 'NR>1 && /^---$/{exit} NR>1{print}' "$f")
   if [ "$(sed -n '1p' "$f")" = '---' ] && [ "$(sed -n '2,$p' "$f" | grep -c '^---$')" -ge 1 ] \
     && printf '%s\n' "$fm" | grep -q '^name:' && printf '%s\n' "$fm" | grep -q '^description:'; then
-    echo "  ✓ ${f#$CLAUDE_DIR/}"
+    echo "  ✓ ${f#$REPO_DIR/}"
   else
-    echo "  ✗ ${f#$CLAUDE_DIR/}: frontmatter（1 行目の --- / 閉じる --- / name: / description:）が不正"; status=1
+    echo "  ✗ ${f#$REPO_DIR/}: frontmatter（1 行目の --- / 閉じる --- / name: / description:）が不正"; status=1
   fi
 done
 

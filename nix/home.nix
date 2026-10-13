@@ -131,7 +131,7 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/config.toml";
       force = true;
     };
-    # Codex CLI の設定・フック・プロンプト。Orca 等の外部ツールが hooks.json へ
+    # Codex CLI の設定・フック・旧プロンプト。Orca 等の外部ツールが hooks.json へ
     # 書き込むため、Grok config と同じ書き込み可能リンクにして
     # captureCodexConfigWrites が switch 直前に実体側を取り込む
     ".codex/config.toml" = {
@@ -146,8 +146,34 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks/guard.sh";
       force = true;
     };
+    ".codex/hooks/harness.sh" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks/harness.sh";
+      force = true;
+    };
     ".codex/prompts/pr.md" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/prompts/pr.md";
+      force = true;
+    };
+    # Codex は個人用スキルを ~/.agents/skills から読む。ディレクトリ単位で
+    # 個別リンクし、ユーザーが追加した別スキルは home-manager の対象にしない
+    ".agents/skills/pr" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/pr";
+      force = true;
+    };
+    ".agents/skills/readme" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/readme";
+      force = true;
+    };
+    ".agents/skills/nix-setup" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/nix-setup";
+      force = true;
+    };
+    ".agents/skills/git-pull" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/git-pull";
+      force = true;
+    };
+    ".agents/skills/clean-branches" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/clean-branches";
       force = true;
     };
     # Devin CLI の設定（モデル・permissions・他ツールのルール読み込みの可否）
