@@ -199,7 +199,7 @@ pre C77 deny "$S_OFF" 'echo "a $(echo $(echo x)) b" && git push'
 pre C78 none "$S_OFF" 'echo "a $(echo $(echo x)) b" && git status'
 pre C79 none "$S_OFF" 'gh api repos/o/r/pulls/1/comments -f body=LGTM'
 echo "#   strip に失敗したとき（awk が無い）は生文字列で判定する（fail-open にしない）"
-LIBLESS="$T/claude-prmode-libless.$$"; mkdir -p "$LIBLESS"; cp "$HOOK" "$LIBLESS/pr-mode.sh"
+LIBLESS="$T/claude-prmode-libless.$$"; mkdir -p "$LIBLESS/lib"; cp "$HOOK" "$LIBLESS/pr-mode.sh"; cp "$HOOKS_DIR/lib/git-write.sh" "$LIBLESS/lib/"
 out=$(payload PreToolUse "$S_OFF" 'git commit -m x' | bash "$LIBLESS/pr-mode.sh" 2>/dev/null); report C80-no-awk-deny deny "$(decision_of "$out")" ""
 out=$(payload PreToolUse "$S_OFF" 'git status' | bash "$LIBLESS/pr-mode.sh" 2>/dev/null); report C81-no-awk-none none "$(decision_of "$out")" ""
 rm -rf "$LIBLESS"
@@ -235,7 +235,7 @@ run_hook "$HOOK" UserPromptSubmit "$S" "" "" "$PR_H1"$'\n\n現在の作業内容
 # 見出しが違えば /pr の展開本文ではないのでフラグは消える
 run_hook "$HOOK" UserPromptSubmit "$S" "" "" $'# 別の見出し\n\n現在の作業内容をコミットし…' >/dev/null; [ -f "$F" ] && r=yes || r=no; report D04b-submit-other-h1 no "$r" ""
 # フックの隣に skills/pr/SKILL.md が無い（見出しが読めない）場合は、展開本文でもフラグを消す（fail-closed。フォールバックのリテラルは持たない）
-NOSKILL="$T/claude-prmode-noskill.$$"; mkdir -p "$NOSKILL/lib"; cp "$HOOK" "$NOSKILL/pr-mode.sh"; cp "$HOOKS_DIR/lib/strip-shell.awk" "$NOSKILL/lib/"
+NOSKILL="$T/claude-prmode-noskill.$$"; mkdir -p "$NOSKILL/lib"; cp "$HOOK" "$NOSKILL/pr-mode.sh"; cp "$HOOKS_DIR/lib/strip-shell.awk" "$HOOKS_DIR/lib/git-write.sh" "$NOSKILL/lib/"
 touch "$F"; run_hook "$NOSKILL/pr-mode.sh" UserPromptSubmit "$S" "" "" "$PR_H1"$'\n\n現在の作業内容をコミットし…' >/dev/null; [ -f "$F" ] && r=yes || r=no; report D04c-submit-no-skill-md no "$r" ""
 rm -rf "$NOSKILL"
 run_hook "$HOOK" UserPromptExpansion "$S" "" pr >/dev/null
@@ -344,4 +344,18 @@ out2=$(run_hook "$HOOK" PreToolUse "$S_ON" 'git commit -m "x"' "" "" "$REPO_SEC"
 report H09-unstaged-not-checked none "$(decision_of "$out2")" "ステージしていない変更は -a が無ければ見ない"
 rm -rf "$REPO_SEC"
 
+# PR 番号を指定した更新も共通の Git 書き込み判定に含める。
+pre I01-api-update deny "$S_OFF" 'gh api repos/o/r/pulls/12 -X PATCH -f title=x'
+pre I02-api-get none "$S_OFF" 'gh api repos/o/r/pulls/12'
+pre I03-api-quoted-update deny "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "PATCH" -f title=x'
+pre I04-api-quoted-create deny "$S_OFF" 'gh api "repos/o/r/pulls" -X POST -f title=x'
+pre I05-api-quoted-get none "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "GET"'
+pre I06-api-literal none "$S_OFF" 'echo gh api "repos/o/r/pulls/12" -X PATCH -f title=x'
+pre I07-api-read-and-literal none "$S_OFF" 'gh api repos/o/r/pulls/12; echo gh api repos/o/r/pulls/12 -X PATCH'
+# 改行はコマンド境界、行継続は同じコマンド、引用内改行は引数として扱う。
+pre J01-api-newline-write deny "$S_OFF" $'git status\ngh api "repos/o/r/pulls/12" -X PATCH -f title=x'
+pre J02-api-newline-literal none "$S_OFF" $'gh api repos/o/r/pulls/12\necho gh api repos/o/r/pulls/12 -X PATCH'
+pre J03-api-continuation deny "$S_OFF" $'gh api "repos/o/r/pulls/12" \\\n-X "PATCH" -f title=x'
+pre J04-api-multiline-echo none "$S_OFF" $'echo "PRの説明\ngh api repos/o/r/pulls/12 -X PATCH"'
+pre J05-api-multiline-body none "$S_OFF" $'gh api repos/o/r/pulls/12 -X GET -f body="利用例\ngh api repos/o/r/pulls/12 -X PATCH"'
 summary "pr-mode.sh"
