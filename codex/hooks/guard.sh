@@ -28,8 +28,9 @@ deny() {
 case "$event" in
   UserPromptSubmit)
     [ -z "$agent" ] || exit 0
-    # 3つの入口は文中でも明示起動。説明依頼で操作しない判断はスキル側で行う。
-    if printf '%s\n' "$prompt" | grep -Eq '(^|[[:space:]])(\$pr|/pr|/prompts:pr)([[:space:]]|$)'; then
+    # スキル指定は文中でも有効。スラッシュコマンドは先頭の語だけを起動とする。
+    if printf '%s\n' "$prompt" | grep -Eq '(^|[[:space:]])\$pr([[:space:]]|$)' \
+      || [[ "$prompt" =~ ^[[:space:]]*(/pr|/prompts:pr)([[:space:]]|$) ]]; then
       printf '%s' "$turn" >"$FLAG"
     else
       case "$prompt" in

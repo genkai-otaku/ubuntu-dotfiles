@@ -127,21 +127,55 @@ pre F18 none "$S_ON" 'git commit -m x' turn-three
 prompt "$S_ON" '変更を $prune で整理してください' turn-four
 pre F19 deny "$S_ON" 'git commit -m x' turn-four
 prompt "$S_ON" '変更を確認して /pr を実行してください' turn-five
-pre F20-inline-slash-pr none "$S_ON" 'git commit -m x' turn-five
+pre F20-inline-slash-pr deny "$S_ON" 'git commit -m x' turn-five
 prompt "$S_ON" '変更を確認して /prompts:pr を実行してください' turn-six
-pre F21-inline-prompts-pr none "$S_ON" 'git commit -m x' turn-six
+pre F21-inline-prompts-pr deny "$S_ON" 'git commit -m x' turn-six
 prompt "$S_ON" '変更を /profile で確認してください' turn-seven
 pre F22-inline-profile deny "$S_ON" 'git commit -m x' turn-seven
 prompt "$S_ON" '変更を /prompts:prune で整理してください' turn-eight
 pre F23-inline-prompts-prune deny "$S_ON" 'git commit -m x' turn-eight
 prompt "$S_ON" '/profile を確認してください' turn-nine
 pre F24-leading-profile deny "$S_ON" 'git commit -m x' turn-nine
+prompt "$S_ON" $' \t\n/pr 実行してください  ' turn-ten
+pre F25-leading-whitespace-pr none "$S_ON" 'git commit -m x' turn-ten
+prompt "$S_ON" $' \t\n/prompts:pr 実行してください  ' turn-eleven
+pre F26-leading-whitespace-prompts-pr none "$S_ON" 'git commit -m x' turn-eleven
+prompt "$S_ON" $'説明を短くして\n/pr を参照してください' turn-twelve
+pre F27-second-line-pr deny "$S_ON" 'git commit -m x' turn-twelve
 cleanup
 pre G01 deny "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "PATCH" -f title=x'
 pre G02 deny "$S_OFF" 'gh api "repos/o/r/pulls" -X POST -f title=x'
 pre G03 none "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "GET"'
 pre G04 none "$S_OFF" 'echo gh api "repos/o/r/pulls/12" -X PATCH -f title=x'
 pre G05 none "$S_OFF" 'gh api repos/o/r/pulls/12; echo gh api repos/o/r/pulls/12 -X PATCH'
+pre G06-api-braces deny "$S_OFF" '{ gh api repos/o/r/pulls -f title=x; }'
+pre G07-api-then deny "$S_OFF" 'if true; then gh api repos/o/r/pulls -f title=x; fi'
+pre G08-api-do deny "$S_OFF" 'for i in 1; do gh api repos/o/r/pulls -f title=x; done'
+pre G09-api-negation deny "$S_OFF" '! gh api repos/o/r/pulls -f title=x'
+pre G10-api-xargs deny "$S_OFF" 'echo x | xargs gh api repos/o/r/pulls -f title=x'
+pre G11-api-else deny "$S_OFF" 'if false; then true; else gh api repos/o/r/pulls -f title=x; fi'
+pre G12-api-elif deny "$S_OFF" 'if false; then true; elif gh api repos/o/r/pulls -f title=x; then true; fi'
+pre G13-api-if deny "$S_OFF" 'if gh api repos/o/r/pulls -f title=x; then true; fi'
+pre G14-api-while deny "$S_OFF" 'while gh api repos/o/r/pulls -f title=x; do break; done'
+pre G15-api-until deny "$S_OFF" 'until gh api repos/o/r/pulls -f title=x; do break; done'
+pre G16-api-braces-get none "$S_OFF" '{ gh api repos/o/r/pulls -X GET -f state=open; }'
+pre G17-api-xargs-comments none "$S_OFF" 'echo x | xargs gh api repos/o/r/pulls/12/comments -f body=LGTM'
+pre G18-api-heredoc-literal none "$S_OFF" $'cat <<\'EOF\'\n{ gh api repos/o/r/pulls -f title=x; }\nEOF'
+pre G19-api-xargs-flags deny "$S_OFF" 'echo x | xargs -r -0 gh api repos/o/r/pulls -f title=x'
+pre G20-api-xargs-attached-count deny "$S_OFF" 'echo x | xargs -n1 gh api repos/o/r/pulls -f title=x'
+pre G21-api-xargs-attached-replace deny "$S_OFF" 'echo x | xargs -I{} gh api repos/o/r/pulls -f title=x'
+pre G22-api-xargs-count deny "$S_OFF" 'echo x | xargs -n 1 gh api repos/o/r/pulls -f title=x'
+pre G23-api-xargs-replace deny "$S_OFF" 'echo x | xargs -I {} gh api repos/o/r/pulls -f title=x'
+pre G24-api-xargs-parallel deny "$S_OFF" 'echo x | xargs -P 4 gh api repos/o/r/pulls -f title=x'
+pre G25-api-xargs-long-option deny "$S_OFF" 'echo x | xargs --max-args 1 gh api repos/o/r/pulls -f title=x'
+pre G26-api-xargs-end-options deny "$S_OFF" 'echo x | xargs -- gh api repos/o/r/pulls -f title=x'
+pre G27-api-xargs-option-get none "$S_OFF" 'echo x | xargs -r -n 1 gh api repos/o/r/pulls -X GET -f state=open'
+pre G28-api-xargs-option-comments none "$S_OFF" 'echo x | xargs -I{} gh api repos/o/r/pulls/12/comments -f body=LGTM'
+pre G29-api-xargs-command-boundary none "$S_OFF" 'echo x | xargs -n 1 echo example; echo gh api repos/o/r/pulls -f title=x'
+pre G30-api-xargs-combined-next deny "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -f title=x'
+pre G31-api-xargs-combined-attached deny "$S_OFF" 'echo x | xargs -r0n1 gh api repos/o/r/pulls -f title=x'
+pre G32-api-xargs-combined-options deny "$S_OFF" 'echo x | xargs -0n 1 -P 4 gh api repos/o/r/pulls -f title=x'
+pre G33-api-xargs-combined-get none "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -X GET -f state=open'
 # 改行はコマンド境界、行継続は同じコマンド、引用内改行は引数として扱う。
 pre H01-api-newline-write deny "$S_OFF" $'git status\ngh api "repos/o/r/pulls/12" -X PATCH -f title=x'
 pre H02-api-newline-literal none "$S_OFF" $'gh api repos/o/r/pulls/12\necho gh api repos/o/r/pulls/12 -X PATCH'

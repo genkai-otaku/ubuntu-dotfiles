@@ -23,22 +23,27 @@ edit() {
 }
 verified() { call "$(post Bash '{"command":"bash .claude/tests/run.sh"}' "$1")" >/dev/null; }
 
-echo '# A. 事故防止: deny を維持し、ask は Codex の承認 UI へ導く'
+echo '# A. 事故防止: deny を維持し、ask は承認情報にかかわらず手動実行へ導く'
 out=$(call "$(pre 'git status')"); report A01-read none "$(decision_of "$out")" "$out"
 out=$(call "$(pre 'git reset --hard')"); report A02-confirm deny "$(decision_of "$out")" "$out"
 reason=$(jget "$out" '.hookSpecificOutput.permissionDecisionReason // ""')
+case "$reason" in *'ユーザーに手動実行を依頼'*) v=yes ;; *) v=no ;; esac
+report A03-manual-guidance yes "$v" "$reason"
+out=$(call "$(pre 'git reset --hard' require_escalated)"); report A04-escalated-still-deny deny "$(decision_of "$out")" "$out"
+reason=$(jget "$out" '.hookSpecificOutput.permissionDecisionReason // ""')
+case "$reason" in *'ユーザーに手動実行を依頼'*) v=yes ;; *) v=no ;; esac
+report A04-escalated-manual-guidance yes "$v" "$reason"
 case "$reason" in *sandbox_permissions=require_escalated*) v=yes ;; *) v=no ;; esac
-report A03-confirm-ui yes "$v" "$reason"
-out=$(call "$(pre 'git reset --hard' require_escalated)"); report A04-confirmed none "$(decision_of "$out")" "$out"
+report A04-escalated-no-retry no "$v" "$reason"
 out=$(call "$(pre 'rm -rf /etc/example' require_escalated)"); report A05-hard-deny deny "$(decision_of "$out")" "$out"
 out=$(call "$(pre "rm -rf $ROOT/temporary-build")"); report A06-local-delete none "$(decision_of "$out")" "$out"
 out=$(call "$(pre 'git branch -D topic')"); report A07-branch-confirm deny "$(decision_of "$out")" "$out"
-out=$(call "$(pre 'git branch -D topic' require_escalated)"); report A08-branch-confirmed none "$(decision_of "$out")" "$out"
+out=$(call "$(pre 'git branch -D topic' require_escalated)"); report A08-branch-escalated-still-deny deny "$(decision_of "$out")" "$out"
 # CLI 0.162.1 の実ペイロードは command だけで承認情報を含まない。
 out=$(call "$(pre 'git reset --hard' | jq 'del(.tool_input.sandbox_permissions)')")
 report A09-cli-missing-permission deny "$(decision_of "$out")" "$out"
 reason=$(jget "$out" '.hookSpecificOutput.permissionDecisionReason // ""')
-case "$reason" in *'フックが承認情報を受け取れない'*'ユーザーに手動実行を依頼'*) v=yes ;; *) v=no ;; esac
+case "$reason" in *'ユーザーに手動実行を依頼'*) v=yes ;; *) v=no ;; esac
 report A10-cli-manual-guidance yes "$v" "$reason"
 case "$reason" in *sandbox_permissions=require_escalated*) v=yes ;; *) v=no ;; esac
 report A11-cli-no-retry no "$v" "$reason"
@@ -64,10 +69,14 @@ edit
 verified '{"stdout":"すべて通過\n","exit_code":0}'
 out=$(stop); report B08-stdout-success none "$(jget "$out" '.decision // "none"')" "$out"
 
-# tool_response が単なるテキストなら既存ゲートと同じ出力行で判定する。
+# 0.162.1 の write_stdin 完了は元 command を持つ Bash と出力文字列で届く。
+# 実行中には PostToolUse が出ず、終了コードもフックには渡されない。
 edit
+out=$(stop); report B09-poll-pending block "$(jget "$out" '.decision // "none"')" "$out"
+verified '"  ✗ harness.sh: 1 件失敗 / 20 件通過\n"'
+out=$(stop); report B10-poll-text-failure block "$(jget "$out" '.decision // "none"')" "$out"
 verified '"すべて通過\n"'
-out=$(stop); report B09-text-success none "$(jget "$out" '.decision // "none"')" "$out"
+out=$(stop); report B11-poll-text-success none "$(jget "$out" '.decision // "none"')" "$out"
 
 echo '# C. 移動先・失敗した編集・Stop の無限継続防止'
 call "$(post apply_patch '{"command":"*** Begin Patch\n*** Update File: README.md\n*** Move to: nix/example.nix\n@@\n-a\n+b\n*** End Patch"}' '{"success":true}')" >/dev/null

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code と Codex で共有する、状態を持たない Git 書き込みの判定。
+# Claude Code・Grok・Codex で共有する、状態を持たない Git 書き込みの判定。
 # 呼び出し側が STRIP_AWK を設定してから source する。
 
 # 引用符の中身と HEREDOC 本文を除去する。失敗時は ";" を返して複合扱いにする
@@ -38,7 +38,8 @@ raw_no_heredoc() {
 # gh api の通常の引数を引用を保持した解析結果から取り出す。
 # コマンド位置・エンドポイント・メソッドを分け、資料中の文字列を操作と誤認しない。
 is_pr_api_write() {
-  local q raw="$1" token command_pos=1 stage=0 endpoint=0 method="" field=0 next_method=0
+  local q raw="$1" token command_pos=1 stage=0 endpoint=0 method="" field=0 next_method=0 xargs_prefix=0 xargs_arg=0
+  local xargs_options xargs_option
   raw=${raw//\\$'\n'/ }
   q=$(printf '%s\n' "$raw" | awk -v keepq=1 -v join_quoted_lines=1 -f "$STRIP_AWK" 2>/dev/null) || q="$raw"
   q=${q//$'\n'/;}
@@ -49,12 +50,37 @@ is_pr_api_write() {
         if [ "$endpoint" -eq 1 ]; then
           case "$method" in POST | PUT | PATCH) return 0 ;; '') [ "$field" -eq 1 ] && return 0 ;; esac
         fi
-        command_pos=1 stage=0 endpoint=0 method="" field=0 next_method=0
+        command_pos=1 stage=0 endpoint=0 method="" field=0 next_method=0 xargs_prefix=0 xargs_arg=0
         continue ;;
     esac
     token=${token//\"/}; token=${token//\'/}; token=${token//$'\001'/ }
     if [ "$command_pos" -eq 1 ]; then
-      case "$token" in command | env | exec | nohup | time | builtin | [A-Za-z_]*=*) continue ;; esac
+      # xargs の通常のオプションを読み飛ばし、実行対象のコマンドを待つ。
+      if [ "$xargs_prefix" -eq 1 ]; then
+        if [ "$xargs_arg" -eq 1 ]; then xargs_arg=0; continue; fi
+        case "$token" in
+          --) xargs_prefix=0; continue ;;
+          --arg-file | --delimiter \
+            | --max-args | --max-procs | --max-chars | --process-slot-var) xargs_arg=1; continue ;;
+          --*) continue ;;
+          -?*)
+            # 短縮オプションを順に読み、値が同じ語になければ次の語を消費する。
+            xargs_options="${token#-}"
+            while [ -n "$xargs_options" ]; do
+              xargs_option="${xargs_options:0:1}"; xargs_options="${xargs_options:1}"
+              case "$xargs_option" in
+                a | d | E | I | L | n | P | s) [ -z "$xargs_options" ] && xargs_arg=1; break ;;
+                e | i | l) break ;; # 任意の値は同じ語の残りだけ。
+              esac
+            done
+            continue ;;
+          *) xargs_prefix=0 ;;
+        esac
+      fi
+      # 予約語・前置き語の後も、実行されるコマンドを待つ。
+      [ "$token" = xargs ] && { xargs_prefix=1; continue; }
+      case "$token" in then | do | else | elif | if | while | until | '{' | '!' \
+        | command | env | exec | nohup | time | builtin | [A-Za-z_]*=*) continue ;; esac
       command_pos=0
       case "$token" in gh | */gh | '\gh') stage=1 ;; esac
       continue

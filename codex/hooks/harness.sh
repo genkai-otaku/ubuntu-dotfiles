@@ -1,6 +1,6 @@
 #!/bin/bash
 # Claude の事故防止・dotfiles 検証ゲートを Codex のイベントへ接続する。
-# ask は自動承認せず、承認情報が届く環境だけ承認ダイアログへの再実行を促す。deny は常に維持する。
+# ask は承認情報にかかわらず拒否し、ユーザーの手動実行へ導く。deny は常に維持する。
 exec 2>/dev/null
 command -v jq >/dev/null 2>&1 || exit 0
 input=$(cat)
@@ -10,11 +10,10 @@ ROOT="$(cd "$(dirname "$SELF")/../.." && pwd -P)" || exit 0
 fields=$(printf '%s' "$input" | jq -r '
   (.tool_input | if type == "object" then . else {} end) as $ti
   | [(.hook_event_name // ""), (.session_id // ""), (.tool_name // ""), (.cwd // ""),
-     ($ti.command // $ti.cmd // "" | if type == "array" then (if length >= 3 and (.[0] | test("(^|/)(bash|sh|zsh)$")) and (.[1] | test("^-[A-Za-z]*c[A-Za-z]*$")) then .[2] else join(" ") end) elif type == "string" then . else "" end),
-     ($ti.sandbox_permissions // "")]
+     ($ti.command // $ti.cmd // "" | if type == "array" then (if length >= 3 and (.[0] | test("(^|/)(bash|sh|zsh)$")) and (.[1] | test("^-[A-Za-z]*c[A-Za-z]*$")) then .[2] else join(" ") end) elif type == "string" then . else "" end)]
   | @sh') || exit 0
 eval "set -- $fields" || exit 0
-event="$1" session="$2" tool="$3" cwd="$4" cmd="$5" permission="$6"
+event="$1" session="$2" tool="$3" cwd="$4" cmd="$5"
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || exit 0
 # Claude セッションと状態ファイルを共用しない。
 normalized=$(printf '%s' "$input" | jq -c --arg s "codex-$session" --arg c "$cmd" '
@@ -30,13 +29,8 @@ case "$event" in
     case "$decision" in
       deny) printf '%s\n' "$result" ;;
       ask)
-        [ "$permission" = require_escalated ] && exit 0
         reason=$(printf '%s' "$result" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""')
-        if [ -z "$permission" ]; then
-          guidance='実行前にユーザーの確認が必要です。この環境ではフックが承認情報を受け取れないため、エージェントからこの操作は実行できません。対象のコマンドと理由を示し、ユーザーに手動実行を依頼してください。別の書き方やツールで迂回しないでください。'
-        else
-          guidance='実行前にユーザーの確認が必要です。sandbox_permissions=require_escalated で同じ操作を再実行し、理由を承認ダイアログに示してください。'
-        fi
+        guidance='実行前にユーザーの確認が必要です。承認情報の有無にかかわらず、エージェントからこの操作は実行できません。対象のコマンドと理由を示し、ユーザーに手動実行を依頼してください。別の書き方やツールで迂回しないでください。'
         jq -cn --arg r "$reason
 $guidance" \
           '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}' ;;
