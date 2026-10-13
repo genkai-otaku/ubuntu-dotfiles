@@ -25,6 +25,8 @@
     { "action": "shell", "resource": "git * commit *", "effect": "ask" },
     { "action": "shell", "resource": "git push *", "effect": "ask" },
     { "action": "shell", "resource": "gh pr create *", "effect": "ask" },
+    { "action": "shell", "resource": "gh pr new *", "effect": "ask" },
+    { "action": "shell", "resource": "gh pr edit *", "effect": "ask" },
     { "action": "shell", "resource": "gh pr merge *", "effect": "ask" },
     { "action": "shell", "resource": "gh api *", "effect": "ask" },
     { "action": "shell", "resource": "git reset --hard*", "effect": "ask" },

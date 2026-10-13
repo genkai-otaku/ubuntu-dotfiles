@@ -11,9 +11,9 @@
 # - 複数ファイルを読める CLI はリンクで参照させ、1 ファイルしか読まない CLI は連結生成する
 #     Claude Code … ~/.claude/CLAUDE.md（core）と ~/.claude/rules/claude.md（差分）へのリンク。
 #                    編集が即反映される（リンクなので install.sh の再実行は不要）
-#     OpenCode     … ~/.config/opencode/AGENTS.md を連結生成。これを置くと、OpenCode の
-#                    Claude 互換フォールバック（グローバル指示が無いときに ~/.claude/CLAUDE.md
-#                    ＝ ai/core.md を読む）が働かないので、core.md を二重に読ませずに済む
+#     OpenCode     … ~/.config/opencode/AGENTS.md を連結生成。V2 は AGENTS.md のみを読み、
+#                    CLAUDE.md へのフォールバックは無い。instructions の参照も未対応なので、
+#                    共通ルールと OpenCode 固有の差分はこのファイルから読み込ませる
 #     Grok         … ~/.grok/AGENTS.md を連結生成
 #     Codex        … ~/.codex/AGENTS.md を連結生成
 #     Devin        … ~/.config/devin/AGENTS.md を連結生成
