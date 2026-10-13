@@ -28,8 +28,9 @@ deny() {
 case "$event" in
   UserPromptSubmit)
     [ -z "$agent" ] || exit 0
-    # スキル指定は文中でも有効。スラッシュコマンドは先頭の語だけを起動とする。
-    if printf '%s\n' "$prompt" | grep -Eq '(^|[[:space:]])\$pr([[:space:]]|$)' \
+    # スキル指定は文中でも有効（Codex と同じく直前の文字は問わず、名前は $ の後の [A-Za-z0-9_:-] の並び）。
+    # スラッシュコマンドは先頭の語だけを起動とする。
+    if printf '%s\n' "$prompt" | LC_ALL=C grep -Eq '\$pr([^A-Za-z0-9_:-]|$)' \
       || [[ "$prompt" =~ ^[[:space:]]*(/pr|/prompts:pr)([[:space:]]|$) ]]; then
       printf '%s' "$turn" >"$FLAG"
     else

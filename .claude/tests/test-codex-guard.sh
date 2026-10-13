@@ -142,12 +142,25 @@ prompt "$S_ON" $' \t\n/prompts:pr 実行してください  ' turn-eleven
 pre F26-leading-whitespace-prompts-pr none "$S_ON" 'git commit -m x' turn-eleven
 prompt "$S_ON" $'説明を短くして\n/pr を参照してください' turn-twelve
 pre F27-second-line-pr deny "$S_ON" 'git commit -m x' turn-twelve
+# Codex と同じく $pr の直前の文字は問わず、直後が [A-Za-z0-9_:-] 以外なら起動とする。
+prompt "$S_ON" '$prでPRを作って' turn-thirteen
+pre F28-skill-pr-before-japanese none "$S_ON" 'git commit -m x' turn-thirteen
+prompt "$S_ON" '変更を$prで出して' turn-fourteen
+pre F29-skill-pr-after-japanese none "$S_ON" 'git commit -m x' turn-fourteen
+prompt "$S_ON" '$pr、お願い' turn-fifteen
+pre F30-skill-pr-before-comma none "$S_ON" 'git commit -m x' turn-fifteen
+prompt "$S_ON" '（$pr）' turn-sixteen
+pre F31-skill-pr-in-parens none "$S_ON" 'git commit -m x' turn-sixteen
+prompt "$S_ON" '変更を$pruneで整理して' turn-seventeen
+pre F32-skill-prune-after-japanese deny "$S_ON" 'git commit -m x' turn-seventeen
+prompt "$S_ON" '$pr-x を使って' turn-eighteen
+pre F33-skill-pr-hyphen deny "$S_ON" 'git commit -m x' turn-eighteen
 cleanup
 pre G01 deny "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "PATCH" -f title=x'
 pre G02 deny "$S_OFF" 'gh api "repos/o/r/pulls" -X POST -f title=x'
 pre G03 none "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "GET"'
-pre G04 none "$S_OFF" 'echo gh api "repos/o/r/pulls/12" -X PATCH -f title=x'
-pre G05 none "$S_OFF" 'gh api repos/o/r/pulls/12; echo gh api repos/o/r/pulls/12 -X PATCH'
+pre G04 deny "$S_OFF" 'echo gh api "repos/o/r/pulls/12" -X PATCH -f title=x'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
+pre G05 deny "$S_OFF" 'gh api repos/o/r/pulls/12; echo gh api repos/o/r/pulls/12 -X PATCH'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
 pre G06-api-braces deny "$S_OFF" '{ gh api repos/o/r/pulls -f title=x; }'
 pre G07-api-then deny "$S_OFF" 'if true; then gh api repos/o/r/pulls -f title=x; fi'
 pre G08-api-do deny "$S_OFF" 'for i in 1; do gh api repos/o/r/pulls -f title=x; done'
@@ -171,15 +184,29 @@ pre G25-api-xargs-long-option deny "$S_OFF" 'echo x | xargs --max-args 1 gh api 
 pre G26-api-xargs-end-options deny "$S_OFF" 'echo x | xargs -- gh api repos/o/r/pulls -f title=x'
 pre G27-api-xargs-option-get none "$S_OFF" 'echo x | xargs -r -n 1 gh api repos/o/r/pulls -X GET -f state=open'
 pre G28-api-xargs-option-comments none "$S_OFF" 'echo x | xargs -I{} gh api repos/o/r/pulls/12/comments -f body=LGTM'
-pre G29-api-xargs-command-boundary none "$S_OFF" 'echo x | xargs -n 1 echo example; echo gh api repos/o/r/pulls -f title=x'
+pre G29-api-xargs-command-boundary deny "$S_OFF" 'echo x | xargs -n 1 echo example; echo gh api repos/o/r/pulls -f title=x'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
 pre G30-api-xargs-combined-next deny "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -f title=x'
 pre G31-api-xargs-combined-attached deny "$S_OFF" 'echo x | xargs -r0n1 gh api repos/o/r/pulls -f title=x'
 pre G32-api-xargs-combined-options deny "$S_OFF" 'echo x | xargs -0n 1 -P 4 gh api repos/o/r/pulls -f title=x'
 pre G33-api-xargs-combined-get none "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -X GET -f state=open'
 # 改行はコマンド境界、行継続は同じコマンド、引用内改行は引数として扱う。
 pre H01-api-newline-write deny "$S_OFF" $'git status\ngh api "repos/o/r/pulls/12" -X PATCH -f title=x'
-pre H02-api-newline-literal none "$S_OFF" $'gh api repos/o/r/pulls/12\necho gh api repos/o/r/pulls/12 -X PATCH'
+pre H02-api-newline-literal deny "$S_OFF" $'gh api repos/o/r/pulls/12\necho gh api repos/o/r/pulls/12 -X PATCH'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
 pre H03-api-continuation deny "$S_OFF" $'gh api "repos/o/r/pulls/12" \\\n-X "PATCH" -f title=x'
 pre H04-api-multiline-echo none "$S_OFF" $'echo "PRの説明\ngh api repos/o/r/pulls/12 -X PATCH"'
 pre H05-api-multiline-body none "$S_OFF" $'gh api repos/o/r/pulls/12 -X GET -f body="利用例\ngh api repos/o/r/pulls/12 -X PATCH"'
+# 前置き語（timeout / nix develop -c 等）を問わず、引用値の括弧は区切りにしない。区切りの後の語は別の区間として見る。
+pre I01-api-timeout deny "$S_OFF" 'timeout 60 gh api repos/o/r/pulls -f title=x'
+pre I02-api-nix-develop deny "$S_OFF" 'nix develop -c gh api repos/o/r/pulls -f title=x'
+pre I03-api-direnv-exec deny "$S_OFF" 'direnv exec . gh api repos/o/r/pulls -f title=x'
+pre I04-api-env-unset deny "$S_OFF" 'env -u GITHUB_TOKEN gh api repos/o/r/pulls -f title=x'
+pre I05-api-nice deny "$S_OFF" 'nice gh api repos/o/r/pulls -f title=x'
+pre I06-api-backquote deny "$S_OFF" 'echo `gh api repos/o/r/pulls -f title=x`'
+pre I07-api-quoted-paren-double deny "$S_OFF" 'gh api -X POST -f title="feat(hooks): x" -f head=feat -f base=main repos/o/r/pulls'
+pre I08-api-quoted-paren-single deny "$S_OFF" "gh api -f title='fix(ci): x' repos/o/r/pulls"
+pre I09-api-quoted-paren-get none "$S_OFF" 'gh api repos/o/r/pulls/12 -f body="x (y)" -X GET'
+pre I10-api-semicolon-boundary none "$S_OFF" 'gh api repos/o/r/pulls/12; echo -X PATCH'
+pre I11-api-newline-boundary none "$S_OFF" $'gh api repos/o/r/pulls/12\necho -X PATCH'
+pre I12-api-subst-body-before-endpoint deny "$S_OFF" 'gh api -X POST -f title=x -f body="$(cat body.md)" repos/o/r/pulls'
+pre I13-api-subst-body-get none "$S_OFF" 'gh api repos/o/r/pulls/12 -f body="$(date)" -X GET'
 summary "codex-guard.sh"

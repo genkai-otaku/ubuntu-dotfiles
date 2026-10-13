@@ -350,8 +350,8 @@ pre I02-api-get none "$S_OFF" 'gh api repos/o/r/pulls/12'
 pre I03-api-quoted-update deny "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "PATCH" -f title=x'
 pre I04-api-quoted-create deny "$S_OFF" 'gh api "repos/o/r/pulls" -X POST -f title=x'
 pre I05-api-quoted-get none "$S_OFF" 'gh api "repos/o/r/pulls/12" -X "GET"'
-pre I06-api-literal none "$S_OFF" 'echo gh api "repos/o/r/pulls/12" -X PATCH -f title=x'
-pre I07-api-read-and-literal none "$S_OFF" 'gh api repos/o/r/pulls/12; echo gh api repos/o/r/pulls/12 -X PATCH'
+pre I06-api-literal deny "$S_OFF" 'echo gh api "repos/o/r/pulls/12" -X PATCH -f title=x'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
+pre I07-api-read-and-literal deny "$S_OFF" 'gh api repos/o/r/pulls/12; echo gh api repos/o/r/pulls/12 -X PATCH'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
 pre I08-api-braces deny "$S_OFF" '{ gh api repos/o/r/pulls -f title=x; }'
 pre I09-api-then deny "$S_OFF" 'if true; then gh api repos/o/r/pulls -f title=x; fi'
 pre I10-api-do deny "$S_OFF" 'for i in 1; do gh api repos/o/r/pulls -f title=x; done'
@@ -375,15 +375,29 @@ pre I27-api-xargs-long-option deny "$S_OFF" 'echo x | xargs --max-args 1 gh api 
 pre I28-api-xargs-end-options deny "$S_OFF" 'echo x | xargs -- gh api repos/o/r/pulls -f title=x'
 pre I29-api-xargs-option-get none "$S_OFF" 'echo x | xargs -r -n 1 gh api repos/o/r/pulls -X GET -f state=open'
 pre I30-api-xargs-option-comments none "$S_OFF" 'echo x | xargs -I{} gh api repos/o/r/pulls/12/comments -f body=LGTM'
-pre I31-api-xargs-command-boundary none "$S_OFF" 'echo x | xargs -n 1 echo example; echo gh api repos/o/r/pulls -f title=x'
+pre I31-api-xargs-command-boundary deny "$S_OFF" 'echo x | xargs -n 1 echo example; echo gh api repos/o/r/pulls -f title=x'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
 pre I32-api-xargs-combined-next deny "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -f title=x'
 pre I33-api-xargs-combined-attached deny "$S_OFF" 'echo x | xargs -r0n1 gh api repos/o/r/pulls -f title=x'
 pre I34-api-xargs-combined-options deny "$S_OFF" 'echo x | xargs -0n 1 -P 4 gh api repos/o/r/pulls -f title=x'
 pre I35-api-xargs-combined-get none "$S_OFF" 'echo x | xargs -rn 1 gh api repos/o/r/pulls -X GET -f state=open'
 # 改行はコマンド境界、行継続は同じコマンド、引用内改行は引数として扱う。
 pre J01-api-newline-write deny "$S_OFF" $'git status\ngh api "repos/o/r/pulls/12" -X PATCH -f title=x'
-pre J02-api-newline-literal none "$S_OFF" $'gh api repos/o/r/pulls/12\necho gh api repos/o/r/pulls/12 -X PATCH'
+pre J02-api-newline-literal deny "$S_OFF" $'gh api repos/o/r/pulls/12\necho gh api repos/o/r/pulls/12 -X PATCH'   # echo の引数のような文字列も書き込み扱い（単純化のため許容）
 pre J03-api-continuation deny "$S_OFF" $'gh api "repos/o/r/pulls/12" \\\n-X "PATCH" -f title=x'
 pre J04-api-multiline-echo none "$S_OFF" $'echo "PRの説明\ngh api repos/o/r/pulls/12 -X PATCH"'
 pre J05-api-multiline-body none "$S_OFF" $'gh api repos/o/r/pulls/12 -X GET -f body="利用例\ngh api repos/o/r/pulls/12 -X PATCH"'
+# 前置き語（timeout / nix develop -c 等）を問わず、引用値の括弧は区切りにしない。区切りの後の語は別の区間として見る。
+pre K01-api-timeout deny "$S_OFF" 'timeout 60 gh api repos/o/r/pulls -f title=x'
+pre K02-api-nix-develop deny "$S_OFF" 'nix develop -c gh api repos/o/r/pulls -f title=x'
+pre K03-api-direnv-exec deny "$S_OFF" 'direnv exec . gh api repos/o/r/pulls -f title=x'
+pre K04-api-env-unset deny "$S_OFF" 'env -u GITHUB_TOKEN gh api repos/o/r/pulls -f title=x'
+pre K05-api-nice deny "$S_OFF" 'nice gh api repos/o/r/pulls -f title=x'
+pre K06-api-backquote deny "$S_OFF" 'echo `gh api repos/o/r/pulls -f title=x`'
+pre K07-api-quoted-paren-double deny "$S_OFF" 'gh api -X POST -f title="feat(hooks): x" -f head=feat -f base=main repos/o/r/pulls'
+pre K08-api-quoted-paren-single deny "$S_OFF" "gh api -f title='fix(ci): x' repos/o/r/pulls"
+pre K09-api-quoted-paren-get none "$S_OFF" 'gh api repos/o/r/pulls/12 -f body="x (y)" -X GET'
+pre K10-api-semicolon-boundary none "$S_OFF" 'gh api repos/o/r/pulls/12; echo -X PATCH'
+pre K11-api-newline-boundary none "$S_OFF" $'gh api repos/o/r/pulls/12\necho -X PATCH'
+pre K12-api-subst-body-before-endpoint deny "$S_OFF" 'gh api -X POST -f title=x -f body="$(cat body.md)" repos/o/r/pulls'
+pre K13-api-subst-body-get none "$S_OFF" 'gh api repos/o/r/pulls/12 -f body="$(date)" -X GET'
 summary "pr-mode.sh"
