@@ -66,5 +66,13 @@
       "Exec(nix eval)",
       "Exec(direnv exec)"
     ]
-  }
+  },
+  "version": 1,
+  "devin": {
+    "org_id": "org-830c8b9b5e874712aac680532f0457ae"
+  },
+  "shell": {
+    "setup_complete": true
+  },
+  "theme_mode": "dark"
 }
