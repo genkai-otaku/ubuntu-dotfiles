@@ -197,6 +197,10 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/plugins/mobile-notify.js";
       force = true;
     };
+    ".config/opencode/plugins/usage-footer" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/plugins/usage-footer";
+      force = true;
+    };
     ".config/opencode/commands/pr.md" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/commands/pr.md";
       force = true;
