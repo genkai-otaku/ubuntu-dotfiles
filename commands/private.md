@@ -11,6 +11,8 @@
 /clean-branches
 /nix-setup
 /git-pull
+/opencode
+/codex
 ```
 
 ## OpenCode
