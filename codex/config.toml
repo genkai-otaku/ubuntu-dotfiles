@@ -1,6 +1,6 @@
-# Codex CLI の設定（実体は dotfiles の codex/config.toml。~/.codex/config.toml はここへのリンク）。
+# Codex CLI の宣言設定（home-manager がホーム側の config.toml へマージする）。
 # グローバル指示は ~/.codex/AGENTS.md（ai/core.md + ai/codex.md の連結。bash ai/install.sh が生成する）。
-# フックは ~/.codex/hooks.json（実体は codex/hooks.json）。
+# フックは codex/hooks.json の管理登録を ~/.codex/hooks.json へマージする。
 #
 # model / model_reasoning_effort はユーザーが選ぶ。既存の値をエージェントが変更しない。
 # Codex専用スキルは ~/.codex/skills（nix/home.nix で個別リンク）。
@@ -17,14 +17,6 @@ network_access = true            # gh・nix・パッケージ取得に必要
 [desktop]
 followUpQueueMode = "steer"
 conversationDetailMode = "STEPS_PROSE"
-
-[marketplaces.openai-bundled]
-source_type = "local"
-source = "/home/peipou/.codex/.tmp/bundled-marketplaces/openai-bundled"
-
-[marketplaces.openai-primary-runtime]
-source_type = "local"
-source = "/home/peipou/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [plugins."codex-app-tools@openai-bundled"]
 enabled = true
@@ -56,57 +48,7 @@ enabled = true
 [plugins."code-review@openai-bundled"]
 enabled = true
 
+# node_repl の起動パス・環境変数は desktop がホーム側へ生成する。
+# 既存の起動定義がある場合だけ、この有効化設定を反映する。
 [mcp_servers.node_repl]
-args = []
-command = "/usr/lib/chatgpt/resources/cua_node/bin/node_repl"
-startup_timeout_sec = 120
-
-[mcp_servers.node_repl.env]
-NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
-NODE_REPL_NODE_MODULE_DIRS = "/usr/lib/chatgpt/resources/cua_node/lib/node_modules"
-NODE_REPL_NODE_PATH = "/usr/lib/chatgpt/resources/cua_node/bin/node"
-NODE_REPL_TRUSTED_CODE_PATHS = "/home/peipou/.codex:/usr/lib/chatgpt/resources/cua_node/lib/node_modules"
-CODEX_HOME = "/home/peipou/.codex"
-BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab,mcpapps"
-BROWSER_USE_TINYSKY_ENABLED = "1"
-NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = ""
-NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = ""
-BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
-BROWSER_USE_CODEX_APP_VERSION = "26.1007.21434"
-NODE_REPL_TRUSTED_SERVICES = '{"browser":"/home/peipou/.codex/plugins/cache/openai-bundled/browser/26.1007.21434/scripts/browser-service.mjs"}'
-CODEX_CLI_PATH = "/usr/lib/chatgpt/resources/codex"
-
-[tui]
-screen_reader_detection_done = true
-
-[tui.model_availability_nux]
-"gpt-6.1-sol" = 4
-
-[projects."/home/peipou/Dev/hobby/katoline-org/katoline"]
-trust_level = "trusted"
-
-[projects."/home/peipou/Dev/kaishi/ubuntu-dotfiles"]
-trust_level = "trusted"
-
-[hooks.state]
-
-[hooks.state."/home/peipou/.codex/hooks.json:pre_tool_use:0:0"]
-trusted_hash = "sha256:b941699f71c639413acaf671ac6709c3ba9e63b535719043685db700ce37e465"
-
-[hooks.state."/home/peipou/.codex/hooks.json:session_end:0:0"]
-trusted_hash = "sha256:5c19e14ab23623f5de44323bc782e516042ea4afec6ca17b029708510bef8d58"
-
-[hooks.state."/home/peipou/.codex/hooks.json:user_prompt_submit:0:0"]
-trusted_hash = "sha256:dc62d7553b9d14832166a18e2de1fff21cbba4da6bc9f1d02b760a822ace0697"
-
-[hooks.state."/home/peipou/.codex/hooks.json:stop:0:0"]
-trusted_hash = "sha256:f8276f0fe166c098876ec6d247a567d03d3064af051759bb87149563bcf8932a"
-
-[hooks.state."/home/peipou/.codex/hooks.json:pre_tool_use:0:1"]
-trusted_hash = "sha256:20347bf8e413ee98827390fe804a553028b672e8afc0cc40955d285607f5d82d"
-
-[hooks.state."/home/peipou/.codex/hooks.json:post_tool_use:0:0"]
-trusted_hash = "sha256:b730ebb18762cac0eb14984b79620d05c7ec53ad474caf7dbc9d187af7daa274"
-
-[hooks.state."/home/peipou/.codex/hooks.json:stop:0:1"]
-trusted_hash = "sha256:566bf5a6a6e60451ecc7f40c6c9b30db05960995d14e5f8c0161a812ef6096c8"
+enabled = true

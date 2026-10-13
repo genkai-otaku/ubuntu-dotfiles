@@ -4,6 +4,7 @@
   pkgs,
   username,
   dotfilesPath,
+  cliConfigPython,
   ...
 }:
 let
@@ -131,17 +132,8 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/grok/config.toml";
       force = true;
     };
-    # Codex CLI の設定・フック・旧プロンプト。Orca 等の外部ツールが hooks.json へ
-    # 書き込むため、Grok config と同じ書き込み可能リンクにして
-    # captureCodexConfigWrites が switch 直前に実体側を取り込む
-    ".codex/config.toml" = {
-      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/config.toml";
-      force = true;
-    };
-    ".codex/hooks.json" = {
-      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks.json";
-      force = true;
-    };
+    # config.toml / hooks.json は下の mergeCliConfigs が実ファイルとして生成する。
+    # フックスクリプトと旧プロンプトは個別リンクを維持する。
     ".codex/hooks/guard.sh" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/hooks/guard.sh";
       force = true;
@@ -176,15 +168,11 @@ in
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/codex/skills/clean-branches";
       force = true;
     };
-    # Devin CLI の設定（モデル・permissions・他ツールのルール読み込みの可否）
-    ".config/devin/config.json" = {
-      source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/devin/config.json";
-      force = true;
-    };
+    # Devin config.json も mergeCliConfigs で実ファイルにして org_id 等を残す。
     # OpenCode のグローバル設定。permission・CLI設定・通知plugin・コマンド・Skillを
     # リポジトリ実体への書き込み可能リンクにして、変更をdotfilesで管理する。
-    # グローバル指示は opencode.json の instructions が ai/ を直接読むため、
-    # ~/.config/opencode/AGENTS.md は置かない（二重読み込みを避ける）。
+    # グローバル指示は ai/install.sh が ~/.config/opencode/AGENTS.md を連結生成する。
+    # V2 は CLAUDE.md にフォールバックせず instructions の参照も未対応なので、AGENTS.md を維持する。
     ".config/opencode/opencode.json" = {
       source = config.lib.file.mkOutOfStoreSymlink "${dotfilesPath}/opencode/opencode.json";
       force = true;
@@ -278,19 +266,19 @@ in
     fi
   '';
 
-  # Codex / Orca が ~/.codex/ のリンクを実体ファイルで置き換えた場合、
-  # home.file の force=true でリンクを戻す前に新しい内容をリポジトリへ取り込む
-  home.activation.captureCodexConfigWrites = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
-    for name in config.toml hooks.json; do
-      dest="$HOME/.codex/$name"
-      src="${dotfilesPath}/codex/$name"
-      if [ -f "$dest" ] && [ ! -L "$dest" ] && [ -f "$src" ] && [ "$dest" -nt "$src" ]; then
-        if ! ${pkgs.diffutils}/bin/cmp -s "$src" "$dest"; then
-          run ${pkgs.coreutils}/bin/cp "$dest" "$src"
-          echo "Codex $name の実体変更をリポジトリへ取り込みました"
-        fi
-      fi
-    done
+  # 旧世代の home.file リンクを先に実ファイルにする。linkGeneration は実ファイルを
+  # 旧管理リンクとして削除しないので、リンク先や外部ツールの保存内容を引き継げる。
+  # リポジトリの旧設定を更新する前の移行手順は codex/README.md を参照。
+  home.activation.detachCliConfigLinks = lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
+    run ${cliConfigPython}/bin/python3 ${dotfilesPath}/nix/merge-cli-config.py \
+      --repo ${lib.escapeShellArg dotfilesPath} --home "$HOME" --detach-only
+  '';
+
+  # 宣言した値だけを上書きし、trust・trusted_hash・desktop のランタイム・org_id は
+  # ホーム側へ残す。外部ツールが実ファイルを更新してもリポジトリへは取り込まない。
+  home.activation.mergeCliConfigs = lib.hm.dag.entryAfter [ "linkGeneration" "detachCliConfigLinks" ] ''
+    run ${cliConfigPython}/bin/python3 ${dotfilesPath}/nix/merge-cli-config.py \
+      --repo ${lib.escapeShellArg dotfilesPath} --home "$HOME"
   '';
 
   # OpenCodeが設定保存時にシンボリックリンクを実体ファイルで置き換えた場合、

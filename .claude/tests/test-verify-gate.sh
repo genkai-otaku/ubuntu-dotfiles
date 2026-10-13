@@ -19,7 +19,7 @@ ROOT="$(cd "$W/repo" && pwd -P)"   # macOS の TMPDIR（/var/…）は /private/
 ST="$W/tmp"
 for f in .claude/hooks/x.sh .claude/hooks/lib/strip-shell.awk .claude/tests/test-x.sh .claude/settings.json .claude/dev-roots \
   .claude/setup.sh .claude/skills/x/SKILL.md .claude/skills/x/ref.md .claude/skills/x/sub/SKILL.md .claude/skills/x/tool.sh \
-  .claude/agents/a.md .claude/agents/sub/b.md .claude/README.md bootstrap.sh flake.nix flake.lock nix/home.nix nix/README.md README.md AGENTS.md docs/x.md \
+  .claude/agents/a.md .claude/agents/sub/b.md .claude/README.md bootstrap.sh flake.nix flake.lock nix/home.nix nix/merge-cli-config.py nix/README.md README.md AGENTS.md docs/x.md \
   ai/core.md ai/claude.md ai/install.sh ai/README.md codex/config.toml codex/hooks/guard.sh codex/prompts/pr.md \
   devin/config.json opencode/opencode.json opencode/setup.sh opencode/README.md; do
   : > "$W/repo/$f"
@@ -122,6 +122,14 @@ len=$(jget "$(edit "$S2" Edit "$W/repo/.claude/dev-roots" >/dev/null; stop "$S2"
 if [ "$len" != empty ] && [ "$len" -gt 0 ] && [ "$len" -le 10000 ]; then ok=yes; else ok=no; fi
 report C11-reason-length yes "$ok" "length=${len}"
 rm -f "$ST/claude-verify-gate-$S2"
+edit "$S2" Edit "$W/repo/nix/merge-cli-config.py" >/dev/null
+report C12-merge-cli-config-both "run.sh,nix eval" "$(state_of "$S2")" "マージスクリプトも run.sh と nix eval の両方"
+reason=$(jget "$(stop "$S2" false)" '.reason // ""')
+report C13-merge-cli-config-reason "yes,yes" "$(has "$reason" 'bash .claude/tests/run.sh'),$(has "$reason" 'nix eval --raw')" "$reason"
+bashrun "$S2" 'bash .claude/tests/run.sh' "$RUN_OK" >/dev/null
+report C14-merge-cli-config-nix-left "nix eval" "$(state_of "$S2")" "run.sh だけでは解除しない"
+bashrun "$S2" 'nix eval --raw .#homeConfigurations.ubuntu.activationPackage.drvPath' "$NIX_OK" >/dev/null
+report C15-merge-cli-config-cleared none "$(state_of "$S2")" "両方の成功で解除する"
 
 echo "# D. 分類の表（run.sh / nix eval / 対象外）"
 n=0
@@ -166,6 +174,7 @@ none $W/repo/.claude/skills/x/sub/SKILL.md
 none $W/repo/.claude/agents/sub/b.md
 none $W/outside/foo.sh
 none $W/repo/.claude/hooks/link-out.sh
+run.sh,nix_eval $W/repo/nix/merge-cli-config.py
 EOF
 rm -f "$ST/claude-verify-gate-$S3"
 edit "$S3" NotebookEdit "$W/repo/.claude/skills/x/nb.ipynb" >/dev/null

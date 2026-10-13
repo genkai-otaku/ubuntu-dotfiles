@@ -1,13 +1,15 @@
 #!/bin/bash
-# .claude/ 配下の検証をまとめて実行する（sudo 不要・数秒で終わる）
+# .claude/ 配下の検証をまとめて実行する（sudo 不要）
 #   bash .claude/tests/run.sh
 # 内容: 設定 JSON（settings.json・opencode/・codex/・devin/）の構文、シェルスクリプトの構文、
 #       hooks/lib/*.awk の構文、SKILL.md / agents の frontmatter、
 #       settings.json のフック・statusLine の登録元検査、
-#       フックと共通指示の配布のテーブル駆動テスト
-#       （pr-mode / guard-destructive / verify-gate / validate-claude-config / ai-install / codex-guard / codex-harness / grok-compat / git-pull。
+#       フックと共通指示の配布、ホーム側の CLI 設定マージのテスト
+#       （pr-mode / guard-destructive / verify-gate / validate-claude-config / ai-install / codex-guard / codex-harness / grok-compat / git-pull / cli-config。
 #         各テストの summary 行も検査する）
 # 環境変数 HOOKS_DIR を指定すると、別の場所にあるフック（作業コピー）をテストできる
+# CLI 設定マージは python3 に tomlkit が無ければ flake の共通 Python を Nix で取得する（初回は時間がかかる）。
+# CLI_CONFIG_PYTHON で Python を指定した場合は自動取得しない。
 set -u
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$(cd "$TESTS_DIR/.." && pwd)"

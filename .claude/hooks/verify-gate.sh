@@ -17,7 +17,7 @@
 #                ai/**・codex/**・devin/**・opencode/*.json・opencode/setup.sh
 #                （run.sh が検査するものだけ。skills 配下の参考資料の .md や agents のサブディレクトリは対象外）
 #     nix eval … flake.nix・flake.lock・nix/**/*.nix
-#     両方     … .claude/dev-roots（guard-destructive.sh とテストが読むうえ、nix/home.nix も readFile で読む）
+#     両方     … .claude/dev-roots・nix/merge-cli-config.py（run.sh が検査するうえ、nix/home.nix も読み込む）
 # - PostToolUse(Bash): 成功した Bash のうち、コマンドに .claude/tests/run.sh を含み stdout に行全体が「すべて通過」の行が
 #   あれば run.sh を、コマンドに homeConfigurations.ubuntu を含み stdout に行全体が /nix/store/<名前>.drv の
 #   行があれば nix eval を記録から消す（| tail でパイプすると終了コードは tail のものになるため出力で判定する。
@@ -65,7 +65,7 @@ classify() {
   local rel
   case "$1" in "$ROOT"/*) rel="${1#"$ROOT"/}" ;; *) return 0 ;; esac
   case "$rel" in
-    .claude/dev-roots) printf 'run.sh\nnix eval\n' ;;
+    .claude/dev-roots | nix/merge-cli-config.py) printf 'run.sh\nnix eval\n' ;;
     .claude/hooks/* | .claude/tests/* | .claude/settings.json | .claude/setup.sh | bootstrap.sh) printf 'run.sh\n' ;;
     ai/README.md) ;;
     ai/* | codex/* | devin/* | opencode/setup.sh | opencode/*.json) printf 'run.sh\n' ;;

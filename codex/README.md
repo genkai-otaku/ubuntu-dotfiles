@@ -14,9 +14,32 @@ Codex CLIとdesktopの個人用設定。Claude Codeと共通の指示・スキ�
 | `prompts/pr.md` | `~/.codex/prompts/pr.md`。旧 `/prompts:pr` 入口 |
 | `../ai/core.md`・`../ai/codex.md` | `bash ai/install.sh` が `~/.codex/AGENTS.md` を連結生成 |
 
-設定とフックのリンクがCodexなどに実体ファイルで置き換えられた場合は、`nix/home.nix` の `captureCodexConfigWrites` が次のswitch前に変更を取り込む。モデルとreasoning effortはユーザーが決め、Claude専用のモデル名やAgent設定は移植しない。
+`nix/home.nix` の `mergeCliConfigs` が宣言設定をホーム側の実ファイルへマージする。モデルとreasoning effortはユーザーがリポジトリで決め、次のswitchでその値を反映する。ホーム側のUIだけで変更した宣言キーは次のswitchで戻る。Claude専用のモデル名やAgent設定は移植しない。
+
+リポジトリにはモデル・承認・サンドボックス・desktop表示設定・pluginの有効化を置く。`projects`、`hooks.state` の信頼ハッシュ、TUIの初回案内状態、marketplaceの配置、desktop生成MCPの実行パス・環境変数はホーム側だけで保持する。Devinの `org_id`・`shell.setup_complete` も同じ扱いにする。未知のローカルキーは削除せず、宣言したキーを再帰的に上書きする（配列は置き換える）。宣言からキーを削除しても既存のホーム側の値は残るので、値を無効にするには宣言値を変更するか、ホーム側で対象キーを削除する。[公式設定の層](https://learn.chatgpt.com/docs/config-file/config-basic)、[公式設定リファレンス](https://learn.chatgpt.com/docs/config-file/config-reference)
+
+`node_repl` の起動定義はdesktopに任せ、起動定義がホーム側にある場合だけ `enabled = true` を反映する。新規ホームに起動パスのないMCPを生成しない。pluginの配置・版はdesktopが生成したローカル状態を保持し、固定のキャッシュパスを宣言しない。
+
+`hooks.json` はdotfilesの `guard.sh`・`harness.sh` のコマンド登録を更新し、Orca等の外部登録を残す。管理フックの削除やmatcher変更も反映する。登録順の変更で再確認が必要になる場合があるが、信頼ハッシュは変更せず保存する。生成処理は全設定を構文検査してから同じディレクトリの一時ファイル経由で置き換え、不正な設定は上書きせず失敗する。
+
+## 旧リンクからの移行
+
+**この変更をメインのチェックアウトへ取り込む前に**、ユーザーが次を実行する。旧リンクがリポジトリを指したまま宣言設定を更新すると、リンク先から外したローカル状態は後のactivationでは復元できない。設定内容を出力せず、現在のリンク先の内容をホーム側の実ファイルへ退避する。
+
+```zsh
+cp -L -p ~/.codex/config.toml ~/.codex/config.toml.local-migration &&
+  mv -T ~/.codex/config.toml.local-migration ~/.codex/config.toml
+cp -L -p ~/.codex/hooks.json ~/.codex/hooks.json.local-migration &&
+  mv -T ~/.codex/hooks.json.local-migration ~/.codex/hooks.json
+cp -L -p ~/.config/devin/config.json ~/.config/devin/config.json.local-migration &&
+  mv -T ~/.config/devin/config.json.local-migration ~/.config/devin/config.json
+```
+
+ファイルが未作成のCLIは対応する2行を実行しない。取り込み後のswitchでは `detachCliConfigLinks` が旧管理リンクを `linkGeneration` より先に実ファイル化し、その後マージする。以後は外部ツールが実ファイルを更新してもリポジトリへ取り込まない。この作業でユーザーのホームやリンクを変更するのはユーザーが実行する移行とswitchだけ。
 
 ## 反映と使い方
+
+マージのactivationとテストは、`flake.nix` の `cli-config-python` に定義した `tomlkit` 入りのPythonを共有する。`bash .claude/tests/run.sh` は `python3` に `tomlkit` が無ければ、flakeが固定したnixpkgsからこのPythonを自動取得する（初回は時間がかかる）。Nixが使えないなど取得に失敗した場合は、原因を表示してテストを失敗させる。Pythonを明示する場合は `CLI_CONFIG_PYTHON=/path/to/python3 bash .claude/tests/run.sh` とする。この場合は自動取得せず、指定したPythonに `tomlkit` が必要。
 
 ```zsh
 bash .claude/tests/run.sh
@@ -45,13 +68,17 @@ Codex CLI 0.162.1は従来の `$CODEX_HOME/skills`（通常は `~/.codex/skills`
 
 この探索先はdeprecatedとして互換維持されているため、将来Codexの探索仕様が変わる際は配置先を再確認する。
 
-スキルは `$名前` で明示起動できる。PRだけは明示起動に限定し、自然言語の「PRを出して」では起動しない。旧custom promptは非推奨なので、新しい入口にはスキルを使う。[公式Skills](https://learn.chatgpt.com/docs/build-skills)、[公式Custom Prompts](https://learn.chatgpt.com/docs/custom-prompts)
+スキルは `$名前` で明示起動できる。PRは文中の `$pr`、または前後の空白を除いた依頼文の先頭語が `/pr`・旧 `/prompts:pr` の場合だけ起動する。説明文中の `/pr` や自然言語の「PRを出して」では起動しない。旧custom promptは非推奨なので、新しい入口にはスキルを使う。[公式Skills](https://learn.chatgpt.com/docs/build-skills)、[公式Custom Prompts](https://learn.chatgpt.com/docs/custom-prompts)
 
-CodexのPreToolUseは拒否専用で、Claudeのフックによる自動承認は使えない。CLI 0.162.1の `exec_command` はフックの `tool_input` に `command` だけを渡し、`sandbox_permissions` は渡さない。そのため確認対象を `require_escalated` で再試行してもフックが承認情報を受け取れず、拒否が続く。対象のコマンドと理由を示し、ユーザーに手動実行を依頼する。[公式実装](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs#L514-L524)
-
-`sandbox_permissions` がフックへ届く環境では、確認対象を理由付きで `require_escalated` に再試行し、Codexの承認UIへ渡す互換動作を維持する。拒否対象は停止し、別の書き方やツールで迂回しない。`clean-branches` の未マージブランチ強制削除も、対象の一覧を示してユーザーに明示的な確認を求め、環境に応じて手動実行の依頼または承認UIへの再試行を行う。
+CodexのPreToolUseは拒否専用で、Claudeのフックによる自動承認は使えない。共通の事故防止ガードが確認（ask）を求める操作は、承認情報の有無にかかわらず常に拒否する。`approvals_reviewer = "auto_review"` では承認がAIの自動レビューへ回るため、`require_escalated` の再試行でユーザー確認を代替しない。対象のコマンドと理由を示し、ユーザーに手動実行を依頼する。`clean-branches` の未マージブランチ強制削除も同様に、候補の一覧と理由、手動実行するコマンドを示す。拒否対象は停止し、別の書き方やツールで迂回しない。
 
 PRモードは起動したターンだけ有効。`Stop` で終了した後は、検証ゲートによって続行する場合も `$pr` の再起動が必要になる。PR手順では検証を先に済ませ、commit・push・PR操作が終わるまでターンを終えない。
+
+CLI 0.162.1では、実行中のプロセスにはPostToolUseを発火せず、`write_stdin` で完了を取得すると `Bash` として元のコマンドと出力を渡す。`tool_input` は `{command: 元コマンド}`、`tool_response` は切り詰め済みの出力文字列で、実行中のツール応答にある `session_id` とフックのpayloadは同一ではない。長い検証は完了まで待ち、実行中なら `write_stdin` で完了結果までポーリングする。[完了時のフック呼び出し](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/core/src/tools/handlers/unified_exec/write_stdin.rs#L158-L169)、[フック入力の生成](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/core/src/tools/context.rs#L432-L445)
+
+終了コードはフックに通知されず、検証ゲートは完了時の出力にある成功行で判定する。成功行が実行中のpollで消費されると最終pollには残らず、検証済みにならない。長い検証は `yield_time_ms` を長めにして完了まで待ち、成功行が完了結果に含まれることを確認する。非0終了でも成功行を含む出力は、このフック入力だけでは区別できない。
+
+`write_stdin` を別のツール名で配信する他ランタイムへの対応は未確認。CLIの実装から、desktopなどでも同じフック入力になるとは推測しない。
 
 ## CLIとdesktopの違い
 

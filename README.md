@@ -1,7 +1,7 @@
 # dotfiles
 
 ## 概要
-Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、tmux（iPhone SSH切断後も grok を残す）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Code / Grok / OpenCode / Codex / Devin の共通AIエージェント設定（指示・スキル・コマンド・権限・フック）を管理する。グローバル指示の実体は `ai/`（共通コア＋CLI別差分）の1か所で、`ai/install.sh` が各CLIへ配る。`.claude/`はClaude CodeとGrok向け、`opencode/`はOpenCode向け、`codex/`・`devin/`はそれぞれのCLI向けの設定で、home-managerが各設定ディレクトリへリンクする。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLI・OpenCode・Codex CLI・Devin CLI、外出先のiPhoneからTailscale経由でSSHするためのOpenSSH / Tailscaleは`bootstrap.sh`が導入する。tmux本体はNix、SSH時の自動attachは`.zshrc`。
+Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する個人用dotfilesリポジトリ。CLIツールやGNOMEデスクトップ設定（テーマ・電源管理・キーバインド・Dock等）に加え、ターミナル（zsh / Oh My Zsh / Powerlevel10k）、tmux（iPhone SSH切断後も grok を残す）、VSCode / Cursor の共通設定（settings・keybindings・拡張機能）、gitconfig、Claude Code / Grok / OpenCode / Codex / Devin の共通AIエージェント設定（指示・スキル・コマンド・権限・フック）を管理する。グローバル指示の実体は `ai/`（共通コア＋CLI別差分）の1か所で、`ai/install.sh` が各CLIへ配る。`.claude/`はClaude CodeとGrok向け、`opencode/`はOpenCode向け、`codex/`・`devin/`はそれぞれのCLI向けの設定で、home-managerがリンクまたはホーム側の実ファイルへの宣言設定のマージで配る。共通のGitHub Actionsワークフロー（`.github/`）もここで管理し、他リポジトリへコピーして使う。Nixで管理できないGUIアプリ・IME（Google Chrome・VSCode・Slack・ibus-mozc等）やOh My Zsh・Claude Code・Grok CLI・OpenCode・Codex CLI・Devin CLI、外出先のiPhoneからTailscale経由でSSHするためのOpenSSH / Tailscaleは`bootstrap.sh`が導入する。tmux本体はNix、SSH時の自動attachは`.zshrc`。
 
 ## 技術スタック
 - Nix / home-manager standalone（Ubuntu環境の宣言的管理。`flake.nix` + `nix/`。CLIツールとGNOMEデスクトップのdconf設定の両方を含む）
@@ -14,8 +14,8 @@ Ubuntu環境全体をNix（home-manager standalone）で宣言的に管理する
 - Claude Code（`settings.json` / Skills / Agents / Hooksによるグローバル設定管理）
 - Grok CLI（xAI。`grok/config.toml`をhome-manager経由で書き込み可能リンク。グローバル指示は`ai/`から連結生成。本体は`bootstrap.sh`が公式インストーラーで導入）
 - OpenCode（`opencode/`のSkills / Commands / permissions / CLI設定をhome-manager経由でリンク。本体は公式インストーラーで導入）
-- Codex CLI（OpenAI。`codex/`の設定・フック・スキルをhome-manager経由でリンク。Claudeと共通の手順を`$pr`・`$readme`等で使う。本体は`bootstrap.sh`が公式インストーラーで導入。反映とUbuntuのサンドボックス対策は`codex/README.md`）
-- Devin CLI（Cognition。`devin/config.json`をhome-manager経由でリンク。本体は`bootstrap.sh`が公式インストーラーで導入）
+- Codex CLI（OpenAI。home-managerが`codex/config.toml`・`hooks.json`の宣言値をホーム側の実ファイルへマージし、フックスクリプト・スキル・旧プロンプトはリンクする。共通スキルの入口は[codex/README.md](/codex/README.md)を参照。本体は`bootstrap.sh`が公式インストーラーで導入。反映とUbuntuのサンドボックス対策は`codex/README.md`）
+- Devin CLI（Cognition。home-managerが`devin/config.json`の宣言値をホーム側の実ファイルへマージし、`org_id`等のローカル状態を保持する。本体は`bootstrap.sh`が公式インストーラーで導入）
 - Web Push通知（dotfiles内蔵の送信スクリプト`claude-notify/send-push.mjs`が、Claude/GrokのStop・NotificationとOpenCode V2の実行成功時にiPhoneへプッシュ通知。受信側PWAは別リポジトリ`claude-notify-mobile`をVercelで配信。Node.js + `web-push` + `jq`）
 - GitHub Actions（`.github/workflows/`配下で共通ワークフローを管理し、他リポジトリへ配布）
 - GitHub CLI（`gh`、`/pr`スキル内でPR作成に使用）
@@ -128,7 +128,7 @@ dotfiles/
 ```zsh
 curl -fsSL https://raw.githubusercontent.com/seino914/ubuntu-dotfiles/main/bootstrap.sh | bash
 ```
-`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用（tmux・`.tmux.conf`・SSH時の自動attach、Claude Code / Grok / OpenCode / Codex / Devinの設定リンクと、`ai/install.sh`による共通指示の配布を含む）、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code / Grok / OpenCode / Codex / Devin CLIの導入（取得や実行に失敗したCLIは警告して飛ばし、最後に一覧で再掲する）、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、OpenSSHサーバーとTailscaleの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、各AIツールの認証、`sudo tailscale up`、iPhoneのTailscale / SSHアプリ等）は[nix/README.md](/nix/README.md)と[ssh-tailscale/README.md](/ssh-tailscale/README.md)を参照。tmuxは追加作業なし（SSHした時点で入る）。
+`bootstrap.sh`が前提パッケージ（git・curl・zsh）の確認、Nix（Determinate Systemsインストーラー）の導入、`~/Dev/kaishi/ubuntu-dotfiles`へのクローン、`flake.nix`の`username`書き換え、home-managerの初回適用（tmux・`.tmux.conf`・SSH時の自動attach、Claude Code / Grok / OpenCode / Codex / Devinの設定配布（リンク・実ファイルへのマージ）と、`ai/install.sh`による共通指示の配布を含む）、ログインシェルのzshへの変更、Oh My ZshとPowerlevel10kの導入、Claude Code / Grok / OpenCode / Codex / Devin CLIの導入（取得や実行に失敗したCLIは警告して飛ばし、最後に一覧で再掲する）、さらにNixで管理できないGUIアプリ・IME（ibus-mozc・mozc-utils-gui・VSCode・Slack・Google Chrome）のapt/snap経由での導入、OpenSSHサーバーとTailscaleの導入までを1コマンドで行う（冪等。sudoが使えない環境では該当ステップを警告してスキップする）。初回の `home-manager switch` は VSCode 導入より先に走るため、拡張機能は bootstrap 完了後にもう一度 `home-manager switch` する。手動で必要な残作業（`~/.gitconfig.local`の配置、`~/.claude/claude-notify.json`の配置、Docker Engineの導入、各AIツールの認証、`sudo tailscale up`、iPhoneのTailscale / SSHアプリ等）は[nix/README.md](/nix/README.md)と[ssh-tailscale/README.md](/ssh-tailscale/README.md)を参照。tmuxは追加作業なし（SSHした時点で入る）。
 
 ### Nix環境の適用・更新（2回目以降）
 ```zsh
@@ -154,7 +154,7 @@ bash ~/Dev/kaishi/ubuntu-dotfiles/ai/install.sh
 
 ### Codex
 
-設定・フックと個人用スキルをhome-managerでリンクする。Claude Codeと共通の手順は`$pr`・`$readme`・`$nix-setup`・`$git-pull`・`$clean-branches`で起動する。フック追加・変更後は新しいチャットの`/hooks`で内容を確認して信頼する。反映方法、CLIとdesktopの違い、Ubuntuで通常のシェル操作が承認を求め続ける場合の対処は[codex/README.md](/codex/README.md)。
+home-managerが`config.toml`・`hooks.json`の宣言値をホーム側の実ファイルへマージし、trust・フックの信頼ハッシュ等のローカル状態をホーム側に残す。フックスクリプト・個人用スキル・旧プロンプトはリンクする。Claude Codeと共通の手順を使うスキルの入口は[codex/README.md](/codex/README.md)を参照。フック追加・変更後は新しいチャットの`/hooks`で内容を確認して信頼する。反映方法、CLIとdesktopの違い、Ubuntuで通常のシェル操作が承認を求め続ける場合の対処は[codex/README.md](/codex/README.md)。
 
 ### zsh設定の反映
 ```zsh
