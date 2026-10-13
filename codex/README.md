@@ -20,7 +20,7 @@ Codex CLIとdesktopの個人用設定。Claude Codeと共通の指示・スキ�
 
 `node_repl` の起動定義はdesktopに任せ、起動定義がホーム側にある場合だけ `enabled = true` を反映する。新規ホームに起動パスのないMCPを生成しない。pluginの配置・版はdesktopが生成したローカル状態を保持し、固定のキャッシュパスを宣言しない。
 
-`hooks.json` はdotfilesの `guard.sh`・`harness.sh` のコマンド登録を更新し、Orca等の外部登録を残す。管理フックの削除やmatcher変更も反映する。登録順の変更で再確認が必要になる場合があるが、信頼ハッシュは変更せず保存する。生成処理は全設定を構文検査してから同じディレクトリの一時ファイル経由で置き換え、不正な設定は上書きせず失敗する。
+`hooks.json` は `~/.codex/hooks/` 配下のファイルを指す登録と、宣言と完全一致する登録を管理対象として宣言分に置き換え、それ以外（Orca等の外部登録）は残す。管理フックの削除やmatcher変更も反映する。私用のフックは `~/.codex/hooks/` に置かず（home-manager がリンクする置き場）、そこ以外に置く。登録順の変更で再確認が必要になる場合があるが、信頼ハッシュは変更せず保存する。生成処理は全設定を構文検査してから同じディレクトリの一時ファイル経由で置き換え、不正な設定は上書きせず失敗する。
 
 ## 旧リンクからの移行
 
@@ -68,9 +68,11 @@ Codex CLI 0.162.1は従来の `$CODEX_HOME/skills`（通常は `~/.codex/skills`
 
 この探索先はdeprecatedとして互換維持されているため、将来Codexの探索仕様が変わる際は配置先を再確認する。
 
-スキルは `$名前` で明示起動できる。PRは文中の `$pr`、または前後の空白を除いた依頼文の先頭語が `/pr`・旧 `/prompts:pr` の場合だけ起動する。説明文中の `/pr` や自然言語の「PRを出して」では起動しない。旧custom promptは非推奨なので、新しい入口にはスキルを使う。[公式Skills](https://learn.chatgpt.com/docs/build-skills)、[公式Custom Prompts](https://learn.chatgpt.com/docs/custom-prompts)
+スキルは `$名前` で明示起動できる。PRは文中の `$pr`（Codex と同じく直前の文字は問わず、直後が英数字・`_` `:` `-` 以外のとき。`$prでPRを作って` も起動し、`$prune` は対象外）、または前後の空白を除いた依頼文の先頭語が `/pr`・旧 `/prompts:pr` の場合だけ起動する。説明文中の `/pr` や自然言語の「PRを出して」では起動しない。旧custom promptは非推奨なので、新しい入口にはスキルを使う。[公式Skills](https://learn.chatgpt.com/docs/build-skills)、[公式Custom Prompts](https://learn.chatgpt.com/docs/custom-prompts)
 
 CodexのPreToolUseは拒否専用で、Claudeのフックによる自動承認は使えない。共通の事故防止ガードが確認（ask）を求める操作は、承認情報の有無にかかわらず常に拒否する。`approvals_reviewer = "auto_review"` では承認がAIの自動レビューへ回るため、`require_escalated` の再試行でユーザー確認を代替しない。対象のコマンドと理由を示し、ユーザーに手動実行を依頼する。`clean-branches` の未マージブランチ強制削除も同様に、候補の一覧と理由、手動実行するコマンドを示す。拒否対象は停止し、別の書き方やツールで迂回しない。
+
+Codexはフックがタイムアウト・失敗すると止めずにツールを実行する（Claudeの `onFailure: "block"` に当たる設定が無い）ため、PreToolUseの `harness.sh`・`guard.sh` のtimeoutは30秒にしている。
 
 PRモードは起動したターンだけ有効。`Stop` で終了した後は、検証ゲートによって続行する場合も `$pr` の再起動が必要になる。PR手順では検証を先に済ませ、commit・push・PR操作が終わるまでターンを終えない。
 
@@ -79,6 +81,8 @@ CLI 0.162.1では、実行中のプロセスにはPostToolUseを発火せず、`
 終了コードはフックに通知されず、検証ゲートは完了時の出力にある成功行で判定する。成功行が実行中のpollで消費されると最終pollには残らず、検証済みにならない。長い検証は `yield_time_ms` を長めにして完了まで待ち、成功行が完了結果に含まれることを確認する。非0終了でも成功行を含む出力は、このフック入力だけでは区別できない。
 
 `write_stdin` を別のツール名で配信する他ランタイムへの対応は未確認。CLIの実装から、desktopなどでも同じフック入力になるとは推測しない。
+
+CLI 0.162.1の `exec_command` は PreToolUse の入力に `workdir` を含めず、入力の cwd はセッション（ターン）の cwd になる。そのため `workdir` を指定した相対パスの削除は、削除ガードがセッションの cwd 基準で判定してしまう。削除・移動の対象は絶対パスで書き、`workdir` と相対パスを組み合わせない。
 
 ## CLIとdesktopの違い
 

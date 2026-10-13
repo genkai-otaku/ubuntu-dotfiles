@@ -18,12 +18,12 @@
           {
             "type": "command",
             "command": "bash \"$HOME/.codex/hooks/harness.sh\"",
-            "timeout": 10
+            "timeout": 30
           },
           {
             "type": "command",
             "command": "bash \"$HOME/.codex/hooks/guard.sh\"",
-            "timeout": 10
+            "timeout": 30
           }
         ]
       }
