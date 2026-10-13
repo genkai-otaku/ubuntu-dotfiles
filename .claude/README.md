@@ -24,6 +24,8 @@
 | `skills/clean-branches/SKILL.md` | `/clean-branches` スキル：ローカルブランチのうちデフォルトブランチ・使用中のブランチ以外を削除して整理（未マージは確認後のみ） |
 | `skills/nix-setup/SKILL.md` | `/nix-setup` スキル：新規プロジェクトの開発環境をNix devShell + direnvでセットアップ |
 | `skills/git-pull/SKILL.md` | `/git-pull` スキル：直下の各リポジトリを `main` に切り替えてfast-forward-onlyでpull（変更があるリポジトリはスキップ） |
+| `skills/opencode/SKILL.md` | `/opencode` スキル：Claude Code から OpenCode を非対話で起動して作業を任せ（`scripts/run.sh`、既定モデル `opencode-go/claude-haiku-5-5#medium`、`--auto` は使わない）、結果を要約・レビューする。Claude Code 専用（OpenCode では `opencode.json` で deny） |
+| `skills/codex/SKILL.md` | `/codex` スキル：Claude Code から Codex CLI を `codex exec` で起動して作業を任せ（`scripts/run.sh`、既定 `gpt-6.1-sol` の medium、サンドボックスは workspace-write 固定）、結果を要約・レビューする。Claude Code 専用（OpenCode では `opencode.json` で deny） |
 | `claude-notify.example.json` | iPhoneプッシュ通知（claude-notify）設定のテンプレート |
 | `setup.sh` | `.claude/` 配下（gitが管理するファイルのみ）を `~/.claude` へシンボリックリンクするスクリプト |
 | `tests/` | git-pull の一時リポジトリ統合テスト、フックのテーブル駆動テスト（pr-mode / guard-destructive / verify-gate / validate-claude-config / Grok 互換 / Codex の `codex/hooks/guard.sh`）、共通指示の配布テスト（ai-install）。一括実行は `bash .claude/tests/run.sh`（配布対象外） |

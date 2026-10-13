@@ -3,6 +3,8 @@
   "skills": ["~/Dev/kaishi/ubuntu-dotfiles/opencode/skills"],
   "permissions": [
     { "action": "skill", "resource": "pr", "effect": "allow" },
+    { "action": "skill", "resource": "opencode", "effect": "deny" },
+    { "action": "skill", "resource": "codex", "effect": "deny" },
     { "action": "read", "resource": "*.env", "effect": "deny" },
     { "action": "read", "resource": "*.env.*", "effect": "deny" },
     { "action": "read", "resource": "*.env.example", "effect": "allow" },
