@@ -25,7 +25,7 @@ Ubuntu用の個人dotfiles。全体像は `README.md`、Nix運用は `nix/README
 - `.claude/hooks/verify-gate.sh` の分類表（run.sh / nix eval）は下の「検証」節と対応させる。対象を増やしたら両方に足す。
 - `codex/hooks/guard.sh` は拒否専用（Codex の PreToolUse は承認を返せない前提）。変更したら `tests/test-codex-guard.sh` を通す。
 - `nix/home.nix` の構成名は `ubuntu` 固定、`username` を動的取得にしない（flakeは環境変数を読めない）。`keyboard.nix` の ibus `embed-preedit-text = false` は戻さない。`editorUserFiles` の `force = true` を外さず、`window.titleBarStyle` / `menuStyle` / `menuBarVisibility` は一緒に変更する。`direnv` を `enableZshIntegration` に置き換えない（`~/.zshrc` は `mkOutOfStoreSymlink` 管理）。
-- `user.name` / `user.email` をリポジトリに書かない。`docs/` はgitignore対象の手元資料置き場。
+- `user.name` / `user.email` をリポジトリに書かない。
 
 ## ファイル追加・変更
 
@@ -33,6 +33,15 @@ Ubuntu用の個人dotfiles。全体像は `README.md`、Nix運用は `nix/README
 - `.claude/` の追加・削除は `bash .claude/setup.sh` で配布する（対象はgit管理ファイルのみ。`.claude/tests/` はリンク対象外）。
 - `opencode/`・`codex/`・`devin/` の設定・Command・Agent・Skillは `nix/home.nix` から個別にリンクする。新しいファイルにはリンクを足す（グローバル指示は `ai/install.sh` が生成するのでリンクしない）。`~/.codex/hooks.json`・`~/.codex/config.toml` は外部ツールが書き込むため `captureCodexConfigWrites` を維持する。
 - `.claude/dev-roots` は1行1パス・`~/` 始まり（`#` 以降・前後の空白・末尾 `/` は無視）。読む側は `guard-destructive.sh`・`nix/home.nix`（`devDirs`）・`tests/test-guard-destructive.sh`。変更時は `git add .claude/dev-roots` をユーザーに依頼し、Nix評価・テスト・配布を通す。
+
+## 作業記録（docs/）
+
+`docs/` はgitignore対象の手元資料置き場で、コミットしない。後からの参照と不具合調査のため、作業の記録をここにためる。
+
+- このリポジトリのファイルを追加・変更したら、ターンを終える前に `docs/changes/YYYY-MM-DD-<英小文字slug>.md` へ記録する（同じ日の同じ話題は追記）。書くこと：日付、変更したファイル、何をなぜ変えたか、検証コマンドと結果、影響範囲と戻し方、未解決点、関連PR・コミット。
+- 変更を伴わない調査でも、結論を後で参照する価値があれば `docs/notes/YYYY-MM-DD-<slug>.md` に残す。
+- ワークツリー（Orca 等）で作業していても、メインのチェックアウト（`git worktree list` の先頭）の `docs/` に書く。
+- 不具合の調査では、まず該当ファイル名や症状で `docs/` を grep して過去の変更を確認する。
 
 ## 検証
 
